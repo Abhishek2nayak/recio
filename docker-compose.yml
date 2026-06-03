@@ -1,0 +1,21 @@
+# Local dev infrastructure for FlowCap: PostgreSQL.
+# The "Save to FlowCap" media path uses hosted Supabase Storage (no local container).
+# Bring up with `pnpm db:up` (alias for `docker compose up -d`).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: flowcap-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flowcap
+      POSTGRES_PASSWORD: flowcap
+      POSTGRES_DB: flowcap
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./.docker-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowcap -d flowcap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

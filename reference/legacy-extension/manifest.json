@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "MyLoom — Record & Share to Your Cloud",
+  "version": "0.1.0",
+  "description": "Lightweight screen recording and screenshots that save straight to your own Google Drive. Your storage, your control.",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "MyLoom",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "options_page": "options/options.html",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "identity",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "https://oauth2.googleapis.com/*"
+  ],
+  "commands": {
+    "start-screen-recording": {
+      "suggested_key": { "default": "Alt+Shift+R" },
+      "description": "Start a screen recording"
+    },
+    "capture-screenshot": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Capture a screenshot of the current tab"
+    }
+  },
+  "oauth2": {
+    "client_id": "REPLACE_WITH_YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.file",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  }
+}

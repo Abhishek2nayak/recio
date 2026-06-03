@@ -1,0 +1,161 @@
+// FlowCap data model. See the architecture doc for rationale.
+// Conventions: soft delete via `deletedAt` on media; Drive OAuth tokens stored
+// only as AES-256-GCM ciphertext (never plaintext); cursor pagination via the
+// (userId, createdAt, id) indexes on media tables.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum StorageProvider {
+  DRIVE
+  FLOWCAP
+}
+
+enum ResourceType {
+  RECORDING
+  SCREENSHOT
+}
+
+enum SharePermission {
+  VIEW
+  COMMENT
+}
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String?
+  avatar       String?
+  passwordHash String? // null for Google-only accounts
+  googleId     String? @unique
+  plan         Plan    @default(FREE)
+
+  storageConnections StorageConnection[]
+  recordings         Recording[]
+  screenshots        Screenshot[]
+  shares             Share[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StorageConnection {
+  id       String          @id @default(cuid())
+  userId   String
+  provider StorageProvider
+
+  // AES-256-GCM ciphertext (iv:authTag:data hex). Null for the FLOWCAP provider.
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  driveEmail   String?
+  defaultFolderId String?
+
+  isActive  Boolean @default(true)
+  // Exactly one connection per user should be the default upload destination.
+  isDefault Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model Recording {
+  id          String @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+
+  duration Int    // seconds
+  size     BigInt // bytes
+  mimeType String // video/webm | video/mp4
+
+  storageProvider StorageProvider
+  storageFileId   String // Drive file ID or FlowCap S3 object key
+  thumbnailUrl    String?
+
+  shareToken String  @unique @default(cuid())
+  isPublic   Boolean @default(false)
+  viewCount  Int     @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, createdAt, id])
+  @@index([shareToken])
+}
+
+model Screenshot {
+  id     String @id @default(cuid())
+  userId String
+  title  String
+
+  size     BigInt // bytes
+  mimeType String // image/png | image/jpeg
+
+  storageProvider StorageProvider
+  storageFileId   String
+  thumbnailUrl    String?
+
+  shareToken String  @unique @default(cuid())
+  isPublic   Boolean @default(false)
+  viewCount  Int     @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, createdAt, id])
+  @@index([shareToken])
+}
+
+model Share {
+  id              String          @id @default(cuid())
+  resourceType    ResourceType
+  resourceId      String
+  createdByUserId String
+  token           String          @unique @default(cuid())
+  permission      SharePermission @default(VIEW)
+  expiresAt       DateTime?
+
+  createdBy User @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([resourceType, resourceId])
+  @@index([createdByUserId])
+}
+
+// Aggregate reaction counts per media item + emoji. Polymorphic (resourceId points
+// at a Recording or Screenshot), so no FK — kept loose on purpose.
+model Reaction {
+  id           String       @id @default(cuid())
+  resourceType ResourceType
+  resourceId   String
+  emoji        String
+  count        Int          @default(0)
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([resourceId, emoji])
+  @@index([resourceId])
+}

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MyLoom Studio</title>
+  <link rel="stylesheet" href="../ui/theme.css" />
+  <link rel="stylesheet" href="studio.css" />
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Topbar ── -->
+  <div class="topbar">
+    <div class="topbar-brand">
+      <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="9" fill="url(#tbg)"/>
+        <circle cx="9" cy="9" r="5.5" stroke="#fff" stroke-width="1.5" fill="none"/>
+        <circle cx="9" cy="9" r="2.5" fill="#fff"/>
+        <defs><linearGradient id="tbg" x1="0" y1="0" x2="18" y2="18" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#8b6ef7"/><stop offset="1" stop-color="#5b3fb5"/>
+        </linearGradient></defs>
+      </svg>
+      <span class="topbar-title">MyLoom Studio</span>
+    </div>
+    <div id="recBadge" class="rec-badge hidden">
+      <span class="rec-dot"></span>
+      <span id="timer" class="rec-timer">0:00</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ SETUP VIEW ══════════ -->
+  <main id="setupView" class="main">
+    <div class="content-wrap">
+
+      <!-- Mode header -->
+      <div class="mode-header">
+        <h1 id="modeTitle" class="mode-title-text">Record</h1>
+        <p id="modeSub" class="mode-subtitle"></p>
+      </div>
+
+      <!-- Video stage -->
+      <div class="stage">
+        <video id="preview" class="stage-video hidden" autoplay muted playsinline></video>
+        <div id="previewPlaceholder" class="stage-placeholder">
+          <div class="placeholder-inner">
+            <div class="placeholder-icon">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <rect x="3" y="8" width="30" height="22" rx="3" stroke="currentColor" stroke-width="2"/>
+                <path d="M33 17.5l10-6v17l-10-6V17.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M14 36h20M24 30v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <p class="placeholder-text">Pick what to share when you hit Start</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Options bar -->
+      <div id="options" class="options-bar">
+        <label class="opt-toggle">
+          <input type="checkbox" id="optMic" />
+          <span class="opt-icon">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="4.5" y="1" width="5" height="8" rx="2.5" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M2 7.5a5 5 0 0 0 10 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M7 12.5v1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span>Microphone</span>
+        </label>
+        <label class="opt-toggle">
+          <input type="checkbox" id="optSysAudio" />
+          <span class="opt-icon">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 5h3l3-3v10l-3-3H2V5zM10 4.5a4 4 0 0 1 0 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span>System audio</span>
+        </label>
+        <label class="opt-toggle opt-select">
+          <span class="opt-icon">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="2" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M5 5h4M5 7h4M5 9h2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span>Quality</span>
+          <select id="optQuality">
+            <option value="720p">720p</option>
+            <option value="1080p">1080p</option>
+            <option value="source">Source</option>
+          </select>
+        </label>
+      </div>
+
+      <!-- Controls — setup -->
+      <div id="setupControls" class="controls-row">
+        <button id="startBtn" class="btn btn-primary btn-lg">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="5" fill="currentColor"/>
+          </svg>
+          Start recording
+        </button>
+        <p class="tip">You'll pick what to share in the browser dialog.</p>
+      </div>
+
+      <!-- Controls — recording -->
+      <div id="recControls" class="controls-row hidden">
+        <button id="pauseBtn" class="btn btn-secondary">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="2" y="2" width="3.5" height="10" rx="1" fill="currentColor"/>
+            <rect x="8.5" y="2" width="3.5" height="10" rx="1" fill="currentColor"/>
+          </svg>
+          Pause
+        </button>
+        <button id="stopBtn" class="btn btn-destructive btn-lg">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="2" y="2" width="10" height="10" rx="1.5" fill="currentColor"/>
+          </svg>
+          Stop recording
+        </button>
+      </div>
+
+      <p id="setupError" class="alert alert-error hidden" style="margin-top:12px;"></p>
+    </div>
+  </main>
+
+  <!-- ══════════════════════════════════════ REVIEW VIEW ══════════ -->
+  <main id="reviewView" class="main hidden">
+    <div class="content-wrap review-layout">
+
+      <!-- Left: video player -->
+      <div class="review-player-col">
+        <video id="result" class="result-video" controls playsinline></video>
+      </div>
+
+      <!-- Right: form + actions -->
+      <div class="review-form-col">
+        <h2 class="review-heading">Save &amp; share</h2>
+        <p class="review-sub">Files go straight to your cloud. We never store a copy.</p>
+
+        <div class="form-group">
+          <label class="form-label" for="titleInput">Title</label>
+          <input id="titleInput" type="text" placeholder="Untitled recording" />
+        </div>
+
+        <div id="reviewStats" class="review-stats"></div>
+
+        <!-- Progress -->
+        <div id="progressWrap" class="progress-wrap hidden">
+          <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+          <p id="progressLabel" class="progress-label">Uploading…</p>
+        </div>
+
+        <!-- Share link -->
+        <div id="shareWrap" class="share-wrap hidden">
+          <div class="share-header">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 1.5a6 6 0 1 1 0 12 6 6 0 0 1 0-12zM5.5 7.5l1.5 1.5 3-3" stroke="#15803d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Saved to your cloud</span>
+          </div>
+          <div class="share-link-row">
+            <input id="shareLink" type="text" class="share-link-input" readonly />
+            <button id="copyLinkBtn" class="btn btn-primary btn-sm">Copy link</button>
+          </div>
+          <a id="openLink" class="open-link" target="_blank" rel="noopener">
+            Open in Drive →
+          </a>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="review-actions">
+          <button id="saveBtn" class="btn btn-primary btn-lg" style="flex:1">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 2v8M3.5 6.5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M1.5 11.5v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            Save to cloud
+          </button>
+          <button id="downloadBtn" class="btn btn-secondary">Download</button>
+        </div>
+        <button id="againBtn" class="btn btn-ghost" style="margin-top:8px;width:100%">
+          ↺ New recording
+        </button>
+
+        <p id="reviewError" class="alert alert-error hidden" style="margin-top:12px;"></p>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- Countdown overlay -->
+<div id="countdown" class="countdown-overlay hidden">
+  <div class="countdown-card">
+    <p class="countdown-label">Recording starts in</p>
+    <span id="countNum" class="countdown-num">3</span>
+  </div>
+</div>
+
+<script type="module" src="studio.js"></script>
+</body>
+</html>

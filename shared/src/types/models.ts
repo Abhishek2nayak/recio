@@ -1,0 +1,107 @@
+/**
+ * API-facing DTO shapes — the serialized forms returned over the wire.
+ *
+ * These deliberately differ from the Prisma row types: dates are ISO strings and
+ * secrets (password hashes, encrypted Drive tokens) are never present. The server
+ * maps Prisma rows → these DTOs before responding.
+ */
+import type {
+  ImageMimeType,
+  LinkVisibility,
+  Plan,
+  ResourceType,
+  SharePermission,
+  StorageProvider,
+  VideoMimeType,
+} from "../constants/enums.js";
+
+/** ISO-8601 timestamp string (e.g. "2026-06-02T12:00:00.000Z"). */
+export type ISODateString = string;
+
+export interface UserDTO {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar: string | null;
+  plan: Plan;
+  createdAt: ISODateString;
+}
+
+export interface StorageConnectionDTO {
+  id: string;
+  provider: StorageProvider;
+  /** The connected Google account's email (for Drive). Null for FlowCap. */
+  driveEmail: string | null;
+  defaultFolderId: string | null;
+  isActive: boolean;
+  /** Whether this provider is the default destination for new uploads. */
+  isDefault: boolean;
+  createdAt: ISODateString;
+}
+
+/** Drive storage quota, when available from the provider. Bytes. */
+export interface StorageQuotaDTO {
+  used: number;
+  limit: number | null;
+}
+
+interface MediaBase {
+  id: string;
+  title: string;
+  size: number;
+  storageProvider: StorageProvider;
+  /** Drive file ID or FlowCap S3 object key. */
+  storageFileId: string;
+  thumbnailUrl: string | null;
+  shareToken: string;
+  isPublic: boolean;
+  visibility: LinkVisibility;
+  viewCount: number;
+  createdAt: ISODateString;
+  updatedAt: ISODateString;
+}
+
+export interface RecordingDTO extends MediaBase {
+  resourceType: typeof ResourceType.RECORDING;
+  description: string | null;
+  /** Seconds. */
+  duration: number;
+  mimeType: VideoMimeType;
+}
+
+export interface ScreenshotDTO extends MediaBase {
+  resourceType: typeof ResourceType.SCREENSHOT;
+  mimeType: ImageMimeType;
+}
+
+export type MediaDTO = RecordingDTO | ScreenshotDTO;
+
+export interface ShareDTO {
+  id: string;
+  resourceType: ResourceType;
+  resourceId: string;
+  token: string;
+  permission: SharePermission;
+  expiresAt: ISODateString | null;
+  createdAt: ISODateString;
+}
+
+/**
+ * Public payload returned by `GET /share/:token` (no auth). Carries just enough to
+ * render the viewer — a playback URL (Drive view URL or a signed FlowCap URL) plus
+ * lightweight media facts. Never exposes owner identity beyond a display name.
+ */
+export interface PublicShareViewDTO {
+  resourceType: ResourceType;
+  /** The media id — public viewers use it to react. */
+  resourceId: string;
+  title: string;
+  mimeType: VideoMimeType | ImageMimeType;
+  /** Drive view URL or a time-limited signed FlowCap URL. */
+  playbackUrl: string;
+  duration: number | null;
+  viewCount: number;
+  ownerName: string | null;
+  createdAt: ISODateString;
+  permission: SharePermission;
+}

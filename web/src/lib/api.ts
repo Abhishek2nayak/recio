@@ -1,0 +1,155 @@
+/**
+ * Backend API client for the web app. Attaches the in-memory access token,
+ * unwraps the `{ success, data }` envelope, and refreshes once on an expired token
+ * (refresh cookie travels via `credentials: "include"`).
+ */
+import type {
+  ApiResponse,
+  CreateShareInput,
+  LinkVisibility,
+  ListMediaQuery,
+  Paginated,
+  PublicShareViewDTO,
+  ReactInput,
+  ReactionCounts,
+  RecordingDTO,
+  ScreenshotDTO,
+  StorageConnectionDTO,
+  StorageProvider,
+  UpdateMediaInput,
+  UserDTO,
+} from "@flowcap/shared";
+import { config } from "./config.js";
+import { getAccessToken, setAccessToken } from "./authToken.js";
+
+export class ApiError extends Error {
+  code: string;
+  status: number;
+  constructor(code: string, message: string, status: number) {
+    super(message);
+    this.code = code;
+    this.status = status;
+    this.name = "ApiError";
+  }
+}
+
+interface Options {
+  method?: string;
+  body?: unknown;
+  auth?: boolean;
+  query?: Record<string, string | number | undefined>;
+  _retried?: boolean;
+}
+
+function buildUrl(path: string, query?: Options["query"]): string {
+  const url = new URL(`${config.apiBaseUrl}${path}`);
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
+    }
+  }
+  return url.toString();
+}
+
+async function request<T>(path: string, opts: Options = {}): Promise<T> {
+  const { method = "GET", body, auth = true, query } = opts;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (auth) {
+    const token = getAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(buildUrl(path, query), {
+    method,
+    headers,
+    credentials: "include",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  const json = (await res.json().catch(() => null)) as ApiResponse<T> | null;
+  if (json && json.success) return json.data;
+
+  const code = json && !json.success ? json.error.code : "INTERNAL_ERROR";
+  const message = json && !json.success ? json.error.message : `Request failed (${res.status}).`;
+
+  if (code === "TOKEN_EXPIRED" && auth && !opts._retried) {
+    if (await tryRefresh()) return request<T>(path, { ...opts, _retried: true });
+  }
+  throw new ApiError(code, message, res.status);
+}
+
+async function tryRefresh(): Promise<boolean> {
+  try {
+    const data = await request<{ accessToken: string; user: UserDTO }>("/auth/refresh", {
+      method: "POST",
+      auth: false,
+    });
+    setAccessToken(data.accessToken);
+    return true;
+  } catch {
+    setAccessToken(null);
+    return false;
+  }
+}
+
+export interface StorageStatus {
+  connections: StorageConnectionDTO[];
+  defaultProvider: StorageProvider;
+  driveQuota: { used: number; limit: number | null } | null;
+}
+
+export const api = {
+  // auth
+  register: (b: { email: string; password: string; name?: string }) =>
+    request<{ accessToken: string; user: UserDTO }>("/auth/register", { method: "POST", body: b, auth: false }),
+  login: (b: { email: string; password: string }) =>
+    request<{ accessToken: string; user: UserDTO }>("/auth/login", { method: "POST", body: b, auth: false }),
+  google: (idToken: string) =>
+    request<{ accessToken: string; user: UserDTO }>("/auth/google", { method: "POST", body: { idToken }, auth: false }),
+  refresh: () =>
+    request<{ accessToken: string; user: UserDTO }>("/auth/refresh", { method: "POST", auth: false }),
+  me: () => request<{ user: UserDTO }>("/auth/me"),
+  logout: () => request<{ loggedOut: boolean }>("/auth/logout", { method: "POST", auth: false }),
+
+  // storage (pass quota:true only where the quota bar is shown — it's a Drive round-trip)
+  storageStatus: (quota = false) =>
+    request<StorageStatus>("/storage/status", { query: quota ? { quota: "1" } : undefined }),
+  driveConsentUrl: () => request<{ url: string }>("/storage/drive/connect"),
+  driveDisconnect: () => request<{ disconnected: boolean }>("/storage/drive/disconnect", { method: "DELETE" }),
+  setDefaultProvider: (provider: StorageProvider) =>
+    request<{ defaultProvider: StorageProvider }>("/storage/default", { method: "PATCH", body: { provider } }),
+
+  // recordings
+  listRecordings: (q: Partial<ListMediaQuery>) =>
+    request<Paginated<RecordingDTO>>("/recordings", { query: q as Record<string, string> }),
+  getRecording: (id: string) =>
+    request<{ recording: RecordingDTO; playbackUrl: string }>(`/recordings/${id}`),
+  updateRecording: (id: string, body: UpdateMediaInput) =>
+    request<{ recording: RecordingDTO }>(`/recordings/${id}`, { method: "PATCH", body }),
+  deleteRecording: (id: string) => request<{ deleted: boolean }>(`/recordings/${id}`, { method: "DELETE" }),
+
+  // screenshots
+  listScreenshots: (q: Partial<ListMediaQuery>) =>
+    request<Paginated<ScreenshotDTO>>("/screenshots", { query: q as Record<string, string> }),
+  getScreenshot: (id: string) =>
+    request<{ screenshot: ScreenshotDTO; playbackUrl: string }>(`/screenshots/${id}`),
+  updateScreenshot: (id: string, body: UpdateMediaInput) =>
+    request<{ screenshot: ScreenshotDTO }>(`/screenshots/${id}`, { method: "PATCH", body }),
+  deleteScreenshot: (id: string) => request<{ deleted: boolean }>(`/screenshots/${id}`, { method: "DELETE" }),
+
+  // share
+  createShare: (body: CreateShareInput) => request<{ shareUrl: string }>("/share", { method: "POST", body }),
+  resolveShare: (token: string) => request<PublicShareViewDTO>(`/share/${token}`, { auth: false }),
+  updateSharePermission: (token: string, visibility: LinkVisibility) =>
+    request<{ token: string; visibility: LinkVisibility }>(`/share/${token}/permissions`, {
+      method: "PATCH",
+      body: { visibility },
+    }),
+  deleteShare: (token: string) => request<{ revoked: boolean }>(`/share/${token}`, { method: "DELETE" }),
+
+  // reactions (public)
+  getReactions: (resourceId: string) =>
+    request<{ counts: ReactionCounts }>(`/reactions/${resourceId}`, { auth: false }),
+  react: (body: ReactInput) =>
+    request<{ counts: ReactionCounts }>("/reactions", { method: "POST", body, auth: false }),
+};

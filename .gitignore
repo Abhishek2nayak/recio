@@ -1,0 +1,27 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.output/
+.turbo/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# prisma
+server/prisma/*.db
+
+# editor / os
+.DS_Store
+.idea/
+*.log
+
+# local storage volumes
+.docker-data/

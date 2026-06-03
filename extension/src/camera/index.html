@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>FlowCap Camera</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+      }
+      #cam {
+        width: 100vw;
+        height: 100vh;
+        object-fit: cover;
+        transform: scaleX(-1); /* selfie mirror */
+      }
+      #blocked {
+        display: none;
+        position: absolute;
+        inset: 0;
+        align-items: center;
+        justify-content: center;
+        color: #a1a1aa;
+        font-size: 11px;
+        text-align: center;
+        padding: 10px;
+      }
+      body.blocked #blocked {
+        display: flex;
+      }
+      body.blocked #cam {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <video id="cam" autoplay muted playsinline></video>
+    <div id="blocked">Camera blocked</div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

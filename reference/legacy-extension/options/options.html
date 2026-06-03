@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MyLoom — Settings</title>
+  <link rel="stylesheet" href="../ui/theme.css" />
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Sidebar nav ── -->
+  <nav class="nav">
+    <div class="nav-brand">
+      <svg width="22" height="22" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="9" fill="url(#obg)"/>
+        <circle cx="9" cy="9" r="5.5" stroke="#fff" stroke-width="1.5" fill="none"/>
+        <circle cx="9" cy="9" r="2.5" fill="#fff"/>
+        <defs><linearGradient id="obg" x1="0" y1="0" x2="18" y2="18" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#8b6ef7"/><stop offset="1" stop-color="#5b3fb5"/>
+        </linearGradient></defs>
+      </svg>
+      <div>
+        <div class="nav-brand-name">MyLoom</div>
+        <div class="nav-brand-sub">Settings</div>
+      </div>
+    </div>
+
+    <div class="nav-links">
+      <a class="nav-link active" href="#cloud">Cloud storage</a>
+      <a class="nav-link" href="#recording">Recording</a>
+      <a class="nav-link" href="#sharing">Sharing</a>
+    </div>
+  </nav>
+
+  <!-- ── Main content ── -->
+  <main class="main">
+    <div class="content">
+
+      <!-- Welcome banner (first run) -->
+      <div id="welcome" class="welcome hidden">
+        <div class="welcome-icon">👋</div>
+        <div>
+          <h2 class="welcome-title">Welcome to MyLoom</h2>
+          <p class="welcome-desc">
+            Record your screen and save straight to your own cloud storage —
+            no per-seat storage fees, no proprietary lock-in. Connect your
+            Google Drive below to get started.
+          </p>
+        </div>
+      </div>
+
+      <!-- ── Cloud storage ── -->
+      <section id="cloud" class="section">
+        <div class="section-head">
+          <div class="section-title-group">
+            <h2 class="section-title">Cloud storage</h2>
+            <p class="section-desc">
+              Recordings upload straight to your connected account.
+              MyLoom never stores a copy.
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <!-- Provider row -->
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">Provider</span>
+              <span class="label-hint">Your recordings are saved here</span>
+            </div>
+            <select id="providerSelect" style="max-width:200px">
+              <option value="google-drive">Google Drive</option>
+              <option value="dropbox" disabled>Dropbox (coming soon)</option>
+            </select>
+          </div>
+
+          <div class="card-divider"></div>
+
+          <!-- Connection status -->
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">Status</span>
+              <span class="label-hint" id="statusText">Checking…</span>
+            </div>
+            <div class="status-actions">
+              <div class="status-pill">
+                <span id="statusDot" class="dot"></span>
+                <span id="statusTextBadge" class="status-badge-text">–</span>
+              </div>
+              <button id="connectBtn" class="btn btn-primary btn-sm">Connect</button>
+              <button id="disconnectBtn" class="btn btn-outline btn-sm hidden">Disconnect</button>
+            </div>
+          </div>
+
+          <p id="cloudError" class="alert alert-error hidden" style="margin-top:4px;"></p>
+        </div>
+      </section>
+
+      <!-- ── Recording ── -->
+      <section id="recording" class="section">
+        <div class="section-head">
+          <h2 class="section-title">Recording</h2>
+          <p class="section-desc">Default settings for new recordings.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">Video quality</span>
+              <span class="label-hint">Higher quality = larger file size</span>
+            </div>
+            <select id="videoQuality" style="max-width:200px">
+              <option value="720p">720p — smaller files</option>
+              <option value="1080p">1080p — recommended</option>
+              <option value="source">Source resolution</option>
+            </select>
+          </div>
+          <div class="card-divider"></div>
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">Camera mode</span>
+              <span class="label-hint">When recording with your camera</span>
+            </div>
+            <select id="webcamMode" style="max-width:200px">
+              <option value="off">Off</option>
+              <option value="pip">Picture-in-picture bubble</option>
+              <option value="only">Camera only</option>
+            </select>
+          </div>
+          <div class="card-divider"></div>
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">Countdown</span>
+              <span class="label-hint">Delay before recording starts</span>
+            </div>
+            <select id="countdownSeconds" style="max-width:200px">
+              <option value="0">None</option>
+              <option value="3">3 seconds</option>
+              <option value="5">5 seconds</option>
+            </select>
+          </div>
+          <div class="card-divider"></div>
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">Microphone</span>
+              <span class="label-hint">Record your voice by default</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="includeMic" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <div class="card-divider"></div>
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">System audio</span>
+              <span class="label-hint">Capture tab / desktop sounds</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="includeSystemAudio" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Sharing ── -->
+      <section id="sharing" class="section">
+        <div class="section-head">
+          <h2 class="section-title">Sharing</h2>
+          <p class="section-desc">Control who can view your recordings.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">Default link access</span>
+              <span class="label-hint">Applied when you save a recording</span>
+            </div>
+            <select id="defaultLinkAccess" style="max-width:220px">
+              <option value="anyone">Anyone with the link</option>
+              <option value="restricted">Restricted (Drive default)</option>
+            </select>
+          </div>
+          <div class="card-divider"></div>
+          <div class="card-row">
+            <div class="row-label">
+              <span class="label-text">Auto-copy link</span>
+              <span class="label-hint">Copy share link automatically after upload</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="autoCopyLink" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <footer class="page-footer">
+      <span id="savedNote" class="saved-note">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <path d="M2 6.5l3 3 6-6" stroke="#15803d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Saved
+      </span>
+      <span class="footer-version">MyLoom v0.1.0 · MVP</span>
+    </footer>
+  </main>
+
+</div>
+<script type="module" src="options.js"></script>
+</body>
+</html>

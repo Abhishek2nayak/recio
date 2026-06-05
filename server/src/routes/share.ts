@@ -117,6 +117,8 @@ shareRouter.get(
       mimeType: media.mimeType as PublicShareViewDTO["mimeType"],
       playbackUrl,
       duration: type === ResourceType.RECORDING ? (media as Recording).duration : null,
+      trimStartSec: type === ResourceType.RECORDING ? (media as Recording).trimStartSec : null,
+      trimEndSec: type === ResourceType.RECORDING ? (media as Recording).trimEndSec : null,
       viewCount: media.viewCount + 1,
       ownerName: owner?.name ?? null,
       createdAt: media.createdAt.toISOString(),

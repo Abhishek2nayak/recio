@@ -137,6 +137,11 @@ model Recording {
   size     BigInt // bytes
   mimeType String // video/webm | video/mp4
 
+  // Non-destructive trim (seconds). When set, players clamp playback to this range;
+  // the underlying file in the user's cloud is left untouched. null = no trim.
+  trimStartSec Float?
+  trimEndSec   Float?
+
   storageProvider StorageProvider
   storageFileId   String // Drive file ID or FlowCap S3 object key
   thumbnailUrl    String?

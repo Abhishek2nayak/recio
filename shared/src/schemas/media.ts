@@ -36,6 +36,9 @@ export const updateMediaSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().trim().max(2000).optional(),
     isPublic: z.boolean().optional(),
+    // Non-destructive trim (seconds, recordings only). `null` clears that bound.
+    trimStartSec: z.number().min(0).nullable().optional(),
+    trimEndSec: z.number().min(0).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "No fields to update." });
 export type UpdateMediaInput = z.infer<typeof updateMediaSchema>;

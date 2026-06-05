@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Recording" ADD COLUMN "trimStartSec" DOUBLE PRECISION,
+ADD COLUMN "trimEndSec" DOUBLE PRECISION;

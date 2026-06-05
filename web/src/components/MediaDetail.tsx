@@ -4,11 +4,19 @@
  * with the Share panel (server-side Drive permission toggle), a Transcript placeholder,
  * and delete. The page wrappers only handle fetching + the type-specific API calls.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Link, useNavigate } from "react-router-dom";
-import { ResourceType, formatBytes, formatDuration, type AnalyticsDTO, type MediaDTO } from "@flowcap/shared";
+import {
+  ResourceType,
+  formatBytes,
+  formatDuration,
+  type AnalyticsDTO,
+  type MediaDTO,
+  type RecordingDTO,
+} from "@flowcap/shared";
 import { api } from "../lib/api.js";
+import { useTrimClamp } from "../hooks/useTrimClamp.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { MediaPlayer } from "./MediaPlayer.js";
 import { SharePanel } from "./SharePanel.js";
@@ -35,6 +43,22 @@ export function MediaDetail({
   const [isPublic, setIsPublic] = useState(media.isPublic);
   const [deleting, setDeleting] = useState(false);
   const isRecording = media.resourceType === ResourceType.RECORDING;
+  const rec = isRecording ? (media as RecordingDTO) : null;
+
+  // Non-destructive trim. Clamp playback to the saved range, except while editing.
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [editingTrim, setEditingTrim] = useState(false);
+  const [savedTrim, setSavedTrim] = useState<{ start: number | null; end: number | null }>({
+    start: rec?.trimStartSec ?? null,
+    end: rec?.trimEndSec ?? null,
+  });
+  useTrimClamp(videoRef, savedTrim.start, savedTrim.end, !editingTrim);
+
+  async function saveTrim(start: number | null, end: number | null) {
+    await api.updateRecording(media.id, { trimStartSec: start, trimEndSec: end });
+    setSavedTrim({ start, end });
+    setEditingTrim(false);
+  }
 
   async function commitTitle() {
     setEditing(false);
@@ -81,7 +105,31 @@ export function MediaDetail({
             </h1>
           )}
 
-          <MediaPlayer media={media} playbackUrl={playbackUrl} />
+          <MediaPlayer media={media} playbackUrl={playbackUrl} videoRef={videoRef} />
+
+          {rec && rec.duration > 0 && (
+            <div>
+              {!editingTrim ? (
+                <button
+                  onClick={() => setEditingTrim(true)}
+                  className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-text-primary"
+                >
+                  <ScissorsIcon />
+                  {savedTrim.start != null || savedTrim.end != null ? "Edit trim" : "Trim"}
+                </button>
+              ) : (
+                <TrimEditor
+                  duration={rec.duration}
+                  videoRef={videoRef}
+                  initialStart={savedTrim.start ?? 0}
+                  initialEnd={savedTrim.end ?? rec.duration}
+                  onCancel={() => setEditingTrim(false)}
+                  onReset={() => void saveTrim(null, null)}
+                  onSave={(start, end) => void saveTrim(start, end)}
+                />
+              )}
+            </div>
+          )}
 
           {/* Owner + meta + reactions */}
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -137,6 +185,128 @@ export function MediaDetail({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ScissorsIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
+      <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12" />
+    </svg>
+  );
+}
+
+/**
+ * Non-destructive trim editor: a timeline with draggable start/end handles. Dragging
+ * scrubs the (clamp-disabled) video for preview; Save persists the bounds, Reset clears
+ * them. The underlying file is never re-encoded — only playback is bounded.
+ */
+function TrimEditor({
+  duration,
+  videoRef,
+  initialStart,
+  initialEnd,
+  onSave,
+  onReset,
+  onCancel,
+}: {
+  duration: number;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  initialStart: number;
+  initialEnd: number;
+  onSave: (start: number, end: number) => void;
+  onReset: () => void;
+  onCancel: () => void;
+}) {
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const [start, setStart] = useState(initialStart);
+  const [end, setEnd] = useState(Math.min(initialEnd, duration));
+
+  function timeFromX(clientX: number): number {
+    const bar = barRef.current;
+    if (!bar) return 0;
+    const r = bar.getBoundingClientRect();
+    const pct = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    return pct * duration;
+  }
+
+  function dragHandle(which: "start" | "end") {
+    return (e: React.PointerEvent) => {
+      e.preventDefault();
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      const move = (ev: PointerEvent) => {
+        const t = timeFromX(ev.clientX);
+        if (which === "start") {
+          const next = Math.min(t, end - 0.5);
+          setStart(Math.max(0, next));
+          if (videoRef.current) videoRef.current.currentTime = Math.max(0, next);
+        } else {
+          const next = Math.max(t, start + 0.5);
+          setEnd(Math.min(duration, next));
+          if (videoRef.current) videoRef.current.currentTime = Math.min(duration, next);
+        }
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    };
+  }
+
+  const startPct = (start / duration) * 100;
+  const endPct = (end / duration) * 100;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Trim</span>
+        <span className="font-mono text-[11px] text-muted">
+          {formatDuration(start)} – {formatDuration(end)} · {formatDuration(Math.max(0, end - start))}
+        </span>
+      </div>
+
+      <div ref={barRef} className="relative mt-4 h-10 select-none rounded-lg bg-bg-primary ring-1 ring-border">
+        {/* dimmed-out regions outside the selection */}
+        <div className="absolute inset-y-0 left-0 rounded-l-lg bg-black/10" style={{ width: `${startPct}%` }} />
+        <div className="absolute inset-y-0 right-0 rounded-r-lg bg-black/10" style={{ width: `${100 - endPct}%` }} />
+        {/* selected region */}
+        <div
+          className="absolute inset-y-0 border-y-2 border-highlight bg-highlight/20"
+          style={{ left: `${startPct}%`, right: `${100 - endPct}%` }}
+        />
+        <Handle pct={startPct} onPointerDown={dragHandle("start")} />
+        <Handle pct={endPct} onPointerDown={dragHandle("end")} />
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
+        <button onClick={onReset} className="text-xs text-muted hover:text-danger">
+          Reset
+        </button>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="highlight" size="sm" onClick={() => onSave(start, end)}>
+            Save trim
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Handle({ pct, onPointerDown }: { pct: number; onPointerDown: (e: React.PointerEvent) => void }) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      className="absolute top-1/2 z-[1] flex h-12 w-3.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded bg-accent shadow"
+      style={{ left: `${pct}%` }}
+    >
+      <span className="h-5 w-0.5 rounded bg-white/80" />
     </div>
   );
 }

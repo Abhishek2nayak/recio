@@ -73,6 +73,9 @@ export interface RecordingDTO extends MediaBase {
   /** Seconds. */
   duration: number;
   mimeType: VideoMimeType;
+  /** Non-destructive trim bounds (seconds); null = no trim. Players clamp to these. */
+  trimStartSec: number | null;
+  trimEndSec: number | null;
 }
 
 export interface ScreenshotDTO extends MediaBase {
@@ -121,6 +124,9 @@ export interface PublicShareViewDTO {
   /** Drive view URL or a time-limited signed Recio URL. */
   playbackUrl: string;
   duration: number | null;
+  /** Non-destructive trim bounds (seconds, recordings); null = none. */
+  trimStartSec: number | null;
+  trimEndSec: number | null;
   viewCount: number;
   ownerName: string | null;
   createdAt: ISODateString;

@@ -51,6 +51,8 @@ export function toRecordingDTO(r: Recording): RecordingDTO {
     storageProvider: r.storageProvider,
     storageFileId: r.storageFileId,
     thumbnailUrl: r.thumbnailUrl,
+    trimStartSec: r.trimStartSec,
+    trimEndSec: r.trimEndSec,
     shareToken: r.shareToken,
     isPublic: r.isPublic,
     visibility: r.isPublic ? LinkVisibility.PUBLIC : LinkVisibility.PRIVATE,

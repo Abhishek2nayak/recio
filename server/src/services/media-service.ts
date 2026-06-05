@@ -207,6 +207,8 @@ export async function updateRecording(
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.isPublic !== undefined ? { isPublic: input.isPublic } : {}),
+      ...(input.trimStartSec !== undefined ? { trimStartSec: input.trimStartSec } : {}),
+      ...(input.trimEndSec !== undefined ? { trimEndSec: input.trimEndSec } : {}),
     },
   });
 }

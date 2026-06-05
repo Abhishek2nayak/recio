@@ -56,6 +56,9 @@ interface MediaBase {
   /** Drive file ID or Recio S3 object key. */
   storageFileId: string;
   thumbnailUrl: string | null;
+  /** A loadable media URL, set on list/detail responses so cards can render a real
+   *  poster (recordings) or the image (screenshots) and a hover preview. */
+  previewUrl?: string | null;
   shareToken: string;
   isPublic: boolean;
   visibility: LinkVisibility;

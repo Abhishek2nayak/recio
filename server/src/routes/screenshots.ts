@@ -45,10 +45,13 @@ screenshotsRouter.get(
   asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListMediaQuery;
     const page = await listScreenshots(getUserId(req), query);
-    const body: Paginated<ScreenshotDTO> = {
-      items: page.items.map(toScreenshotDTO),
-      nextCursor: page.nextCursor,
-    };
+    const items = await Promise.all(
+      page.items.map(async (s) => ({
+        ...toScreenshotDTO(s),
+        previewUrl: await getPlaybackUrl(s.userId, s.storageProvider, s.storageFileId, s.id),
+      })),
+    );
+    const body: Paginated<ScreenshotDTO> = { items, nextCursor: page.nextCursor };
     res.json(ok(body));
   }),
 );

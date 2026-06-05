@@ -45,10 +45,13 @@ recordingsRouter.get(
   asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListMediaQuery;
     const page = await listRecordings(getUserId(req), query);
-    const body: Paginated<RecordingDTO> = {
-      items: page.items.map(toRecordingDTO),
-      nextCursor: page.nextCursor,
-    };
+    const items = await Promise.all(
+      page.items.map(async (r) => ({
+        ...toRecordingDTO(r),
+        previewUrl: await getPlaybackUrl(r.userId, r.storageProvider, r.storageFileId, r.id),
+      })),
+    );
+    const body: Paginated<RecordingDTO> = { items, nextCursor: page.nextCursor };
     res.json(ok(body));
   }),
 );

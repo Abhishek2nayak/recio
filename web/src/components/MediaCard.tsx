@@ -1,7 +1,7 @@
 /** A media tile for the dashboard grid: thumbnail, title, meta, and a quick
  *  visibility/share menu (per-file public ↔ private, copy link) — no detail-page
  *  round-trip needed. */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ResourceType, formatDuration, type MediaDTO } from "@flowcap/shared";
@@ -29,23 +29,12 @@ export function MediaCard({ media }: { media: MediaDTO }) {
       className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="relative aspect-video overflow-hidden bg-bg-secondary">
-        {media.thumbnailUrl ? (
-          <img src={media.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-bg-secondary to-border text-muted">
-            {isRecording ? <VideoIcon width={28} height={28} /> : <ImageIcon width={28} height={28} />}
-          </div>
-        )}
-        {isRecording && (
-          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-            {/* Electric-kiwi play: the brand pop, with the required black foreground. */}
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-highlight text-[#0A0A0A] shadow-lg">
-              <PlayIcon width={18} height={18} />
-            </span>
-          </span>
-        )}
+        <Thumbnail
+          isRecording={isRecording}
+          previewUrl={media.previewUrl ?? media.thumbnailUrl ?? null}
+        />
         {isRecording && media.duration > 0 && (
-          <span className="absolute bottom-2 right-2 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[11px] text-white">
+          <span className="absolute bottom-2 right-2 z-[1] rounded bg-black/75 px-1.5 py-0.5 font-mono text-[11px] text-white">
             {formatDuration(media.duration)}
           </span>
         )}
@@ -77,6 +66,59 @@ export function MediaCard({ media }: { media: MediaDTO }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+/**
+ * Card thumbnail. Screenshots show the image; recordings show a seeked poster frame
+ * from the (proxied) video and play a muted loop on hover — no separate thumbnail
+ * storage needed. Same-origin proxy means no canvas/CORS tainting.
+ */
+function Thumbnail({ isRecording, previewUrl }: { isRecording: boolean; previewUrl: string | null }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  if (!previewUrl) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-bg-secondary to-border text-muted">
+        {isRecording ? <VideoIcon width={28} height={28} /> : <ImageIcon width={28} height={28} />}
+      </div>
+    );
+  }
+
+  if (!isRecording) {
+    return <img src={previewUrl} alt="" className="h-full w-full object-cover" />;
+  }
+
+  return (
+    <div
+      className="h-full w-full"
+      onMouseEnter={() => void videoRef.current?.play().catch(() => {})}
+      onMouseLeave={() => videoRef.current?.pause()}
+    >
+      <video
+        ref={videoRef}
+        src={previewUrl}
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        // Nudge off frame 0 so the poster isn't a black first frame.
+        onLoadedMetadata={(e) => {
+          try {
+            e.currentTarget.currentTime = 0.1;
+          } catch {
+            /* non-seekable — first frame is fine */
+          }
+        }}
+        className="h-full w-full bg-black object-cover"
+      />
+      {/* Kiwi play affordance; fades out on hover while the clip previews. */}
+      <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-100 transition-opacity group-hover:opacity-0">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-highlight text-[#0A0A0A] shadow-lg">
+          <PlayIcon width={18} height={18} />
+        </span>
+      </span>
+    </div>
   );
 }
 

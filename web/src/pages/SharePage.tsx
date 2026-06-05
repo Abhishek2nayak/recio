@@ -5,6 +5,7 @@ import { ResourceType, formatDuration, type PublicShareViewDTO } from "@flowcap/
 import { ApiError, api } from "../lib/api.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { Reactions } from "../components/Reactions.js";
+import { Comments } from "../components/Comments.js";
 import { Logo } from "../components/icons.js";
 import { Spinner } from "../components/ui.js";
 
@@ -35,10 +36,10 @@ export function SharePage() {
       <header className="flex items-center justify-between border-b border-border px-5 py-3">
         <Link to="/" className="flex items-center gap-2 text-text-primary">
           <Logo className="text-accent" />
-          <span className="text-sm font-semibold tracking-tight">FlowCap</span>
+          <span className="text-sm font-semibold tracking-tight">Recio</span>
         </Link>
         <Link to={authed ? "/dashboard" : "/register"} className="text-xs text-accent hover:text-accent-hover">
-          {authed ? "Open dashboard →" : "Get FlowCap →"}
+          {authed ? "Open dashboard →" : "Get Recio →"}
         </Link>
       </header>
 
@@ -55,19 +56,11 @@ export function SharePage() {
 
 function ShareViewer({ view }: { view: PublicShareViewDTO }) {
   const isRecording = view.resourceType === ResourceType.RECORDING;
-  const isDrive = view.playbackUrl.includes("drive.google.com");
 
   return (
     <div className="w-full max-w-4xl">
       <div className="overflow-hidden rounded-xl border border-border bg-black">
-        {isDrive ? (
-          <iframe
-            title={view.title}
-            src={view.playbackUrl.replace("/view", "/preview")}
-            allow="autoplay; fullscreen"
-            className="aspect-video w-full"
-          />
-        ) : isRecording ? (
+        {isRecording ? (
           <video src={view.playbackUrl} controls autoPlay className="aspect-video w-full bg-black" />
         ) : (
           <img src={view.playbackUrl} alt={view.title} className="max-h-[72vh] w-full object-contain" />
@@ -91,6 +84,10 @@ function ShareViewer({ view }: { view: PublicShareViewDTO }) {
         </div>
         <Reactions resourceType={view.resourceType} resourceId={view.resourceId} />
       </div>
+
+      <div className="mt-6">
+        <Comments resourceType={view.resourceType} resourceId={view.resourceId} />
+      </div>
     </div>
   );
 }
@@ -101,7 +98,7 @@ function Notice({ title, body }: { title: string; body: string }) {
       <h1 className="text-lg font-semibold">{title}</h1>
       <p className="mt-1.5 text-sm text-muted">{body}</p>
       <Link to="/" className="mt-5 inline-block text-sm text-accent hover:text-accent-hover">
-        Go to FlowCap →
+        Go to Recio →
       </Link>
     </div>
   );

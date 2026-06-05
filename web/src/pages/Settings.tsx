@@ -55,6 +55,24 @@ export function Settings() {
     setBusy(false);
   }
 
+  async function connectDropbox() {
+    setBusy(true);
+    try {
+      const { url } = await api.dropboxConsentUrl();
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't start the Dropbox connection.");
+      setBusy(false);
+    }
+  }
+
+  async function disconnectDropbox() {
+    setBusy(true);
+    await api.dropboxDisconnect().catch(() => {});
+    await load();
+    setBusy(false);
+  }
+
   async function setDefault(provider: StorageProvider) {
     setStatus((s) => (s ? { ...s, defaultProvider: provider } : s));
     try {
@@ -65,6 +83,8 @@ export function Settings() {
   }
 
   const drive = status?.connections.find((c) => c.provider === StorageProvider.DRIVE && c.isActive);
+  const dropbox = status?.connections.find((c) => c.provider === StorageProvider.DROPBOX && c.isActive);
+  const dropboxResult = params.get("dropbox");
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-6">
@@ -79,6 +99,16 @@ export function Settings() {
       {driveResult === "error" && (
         <div className="mt-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
           Drive connection failed. Please try again.
+        </div>
+      )}
+      {dropboxResult === "connected" && (
+        <div className="mt-4 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+          Dropbox connected.
+        </div>
+      )}
+      {dropboxResult === "error" && (
+        <div className="mt-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          Dropbox connection failed. Please try again.
         </div>
       )}
 
@@ -132,13 +162,37 @@ export function Settings() {
               )}
             </Card>
 
-            {/* FlowCap storage */}
+            {/* Dropbox */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <StorageBadge provider={StorageProvider.DROPBOX} />
+                  <div>
+                    <p className="text-sm font-medium">Dropbox</p>
+                    <p className="font-mono text-[11px] text-muted">
+                      {dropbox ? dropbox.driveEmail ?? "Connected" : "Not connected"}
+                    </p>
+                  </div>
+                </div>
+                {dropbox ? (
+                  <Button variant="secondary" size="sm" onClick={disconnectDropbox} disabled={busy}>
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={connectDropbox} disabled={busy}>
+                    Connect
+                  </Button>
+                )}
+              </div>
+            </Card>
+
+            {/* Recio storage */}
             <Card className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <StorageBadge provider={StorageProvider.FLOWCAP} />
                   <div>
-                    <p className="text-sm font-medium">FlowCap storage</p>
+                    <p className="text-sm font-medium">Recio storage</p>
                     <p className="font-mono text-[11px] text-muted">Always available</p>
                   </div>
                 </div>
@@ -152,9 +206,9 @@ export function Settings() {
       {status && (
         <>
           <h2 className="mt-8 text-sm font-medium text-muted">Default destination for new captures</h2>
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="mt-3 grid grid-cols-3 gap-3">
             <DefaultChip
-              label="FlowCap"
+              label="Recio"
               active={status.defaultProvider === StorageProvider.FLOWCAP}
               onClick={() => setDefault(StorageProvider.FLOWCAP)}
             />
@@ -163,6 +217,12 @@ export function Settings() {
               active={status.defaultProvider === StorageProvider.DRIVE}
               disabled={!drive}
               onClick={() => setDefault(StorageProvider.DRIVE)}
+            />
+            <DefaultChip
+              label="Dropbox"
+              active={status.defaultProvider === StorageProvider.DROPBOX}
+              disabled={!dropbox}
+              onClick={() => setDefault(StorageProvider.DROPBOX)}
             />
           </div>
         </>

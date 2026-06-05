@@ -12,6 +12,7 @@ import { useAuthStore } from "../stores/authStore.js";
 import { MediaPlayer } from "./MediaPlayer.js";
 import { SharePanel } from "./SharePanel.js";
 import { Reactions } from "./Reactions.js";
+import { Comments } from "./Comments.js";
 import { Button, StorageBadge } from "./ui.js";
 import { TrashIcon } from "./icons.js";
 
@@ -98,6 +99,8 @@ export function MediaDetail({
             </div>
             <Reactions resourceType={media.resourceType} resourceId={media.id} />
           </div>
+
+          <Comments resourceType={media.resourceType} resourceId={media.id} />
         </div>
 
         {/* Right rail */}
@@ -110,7 +113,7 @@ export function MediaDetail({
           />
 
           {/* Transcript placeholder (Loom parity; AI transcript is a Phase-2 feature) */}
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium">Transcript</h3>
               <span className="rounded-full bg-bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted">
@@ -118,11 +121,11 @@ export function MediaDetail({
               </span>
             </div>
             <p className="mt-1.5 text-xs text-muted">
-              Automatic transcripts and AI summaries are coming to FlowCap recordings.
+              Automatic transcripts and AI summaries are coming to Recio recordings.
             </p>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
+          <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
             <span className="flex items-center gap-2 text-xs text-muted">
               Stored in <StorageBadge provider={media.storageProvider} />
             </span>
@@ -163,7 +166,7 @@ function DeleteDialog({ deleting, onConfirm }: { deleting: boolean; onConfirm: (
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 w-[400px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-card p-5 shadow-2xl focus:outline-none">
+        <Dialog.Content className="fixed left-1/2 top-1/2 w-[400px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-5 shadow-xl focus:outline-none">
           <Dialog.Title className="text-base font-semibold">Delete this item?</Dialog.Title>
           <Dialog.Description className="mt-1.5 text-sm text-muted">
             This removes it from your library and deletes the file from your storage. This can't be undone.

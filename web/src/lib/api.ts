@@ -8,6 +8,8 @@ import type {
   CreateShareInput,
   LinkVisibility,
   ListMediaQuery,
+  CommentDTO,
+  CreateCommentInput,
   Paginated,
   PublicShareViewDTO,
   ReactInput,
@@ -75,6 +77,10 @@ async function request<T>(path: string, opts: Options = {}): Promise<T> {
   if (code === "TOKEN_EXPIRED" && auth && !opts._retried) {
     if (await tryRefresh()) return request<T>(path, { ...opts, _retried: true });
   }
+  // A gated feature (HTTP 402): surface the upsell globally so any caller triggers it.
+  if (code === "UPGRADE_REQUIRED" && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("recio:upgrade-required", { detail: { message } }));
+  }
   throw new ApiError(code, message, res.status);
 }
 
@@ -116,6 +122,8 @@ export const api = {
     request<StorageStatus>("/storage/status", { query: quota ? { quota: "1" } : undefined }),
   driveConsentUrl: () => request<{ url: string }>("/storage/drive/connect"),
   driveDisconnect: () => request<{ disconnected: boolean }>("/storage/drive/disconnect", { method: "DELETE" }),
+  dropboxConsentUrl: () => request<{ url: string }>("/storage/dropbox/connect"),
+  dropboxDisconnect: () => request<{ disconnected: boolean }>("/storage/dropbox/disconnect", { method: "DELETE" }),
   setDefaultProvider: (provider: StorageProvider) =>
     request<{ defaultProvider: StorageProvider }>("/storage/default", { method: "PATCH", body: { provider } }),
 
@@ -152,4 +160,10 @@ export const api = {
     request<{ counts: ReactionCounts }>(`/reactions/${resourceId}`, { auth: false }),
   react: (body: ReactInput) =>
     request<{ counts: ReactionCounts }>("/reactions", { method: "POST", body, auth: false }),
+
+  // comments (public read; post optionally authed)
+  getComments: (resourceId: string) =>
+    request<{ comments: CommentDTO[] }>(`/comments/${resourceId}`, { auth: false }),
+  addComment: (body: CreateCommentInput, authed: boolean) =>
+    request<{ comment: CommentDTO }>("/comments", { method: "POST", body, auth: authed }),
 };

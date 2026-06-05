@@ -27,10 +27,17 @@ import { requireAuth, getUserId } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { buildDriveConsentUrl, exchangeDriveCode } from "../services/google-oauth.js";
 import {
+  buildDropboxConsentUrl,
+  dropboxConfigured,
+  exchangeDropboxCode,
+} from "../services/dropbox-service.js";
+import {
   disconnectDrive,
+  disconnectProvider,
   getDefaultProvider,
   listConnections,
   saveDriveConnection,
+  saveDropboxConnection,
   setDefaultProvider,
 } from "../services/connection-service.js";
 import { getStorageQuota } from "../services/drive-service.js";
@@ -116,6 +123,54 @@ storageRouter.delete(
   requireAuth,
   asyncHandler(async (req, res) => {
     await disconnectDrive(getUserId(req));
+    res.json(ok({ disconnected: true }));
+  }),
+);
+
+// ── Dropbox (mirrors the Drive flow) ──
+storageRouter.get(
+  "/dropbox/connect",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (!dropboxConfigured()) throw new HttpError(ErrorCode.STORAGE_NOT_CONNECTED, "Dropbox isn't configured.");
+    res.json(ok({ url: buildDropboxConsentUrl(signOAuthState(getUserId(req))) }));
+  }),
+);
+
+storageRouter.get(
+  "/dropbox/callback",
+  asyncHandler(async (req, res) => {
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    const settingsUrl = `${env.WEB_ORIGIN}/settings`;
+    if (!code || !state) return void res.redirect(`${settingsUrl}?dropbox=error`);
+    let userId: string;
+    try {
+      userId = verifyOAuthState(state);
+    } catch {
+      return void res.redirect(`${settingsUrl}?dropbox=error`);
+    }
+    await saveDropboxConnection(userId, await exchangeDropboxCode(code));
+    res.redirect(`${settingsUrl}?dropbox=connected`);
+  }),
+);
+
+storageRouter.post(
+  "/dropbox/callback",
+  requireAuth,
+  validate(driveCallbackSchema),
+  asyncHandler(async (req, res) => {
+    const { code, redirectUri } = req.body as DriveCallbackInput;
+    const conn = await saveDropboxConnection(getUserId(req), await exchangeDropboxCode(code, redirectUri));
+    res.json(ok({ connection: toStorageConnectionDTO(conn) }));
+  }),
+);
+
+storageRouter.delete(
+  "/dropbox/disconnect",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await disconnectProvider(getUserId(req), StorageProvider.DROPBOX);
     res.json(ok({ disconnected: true }));
   }),
 );

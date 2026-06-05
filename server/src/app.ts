@@ -15,9 +15,11 @@ import { authRouter } from "./routes/auth.js";
 import { storageRouter } from "./routes/storage.js";
 import { uploadRouter } from "./routes/upload.js";
 import { recordingsRouter } from "./routes/recordings.js";
+import { mediaRouter } from "./routes/media.js";
 import { screenshotsRouter } from "./routes/screenshots.js";
 import { shareRouter } from "./routes/share.js";
 import { reactionsRouter } from "./routes/reactions.js";
+import { commentsRouter } from "./routes/comments.js";
 
 export function createApp(): Express {
   const app = express();
@@ -44,6 +46,10 @@ export function createApp(): Express {
     res.json(ok({ status: "ok", uptime: process.uptime() }));
   });
 
+  // Media streaming is mounted BEFORE the rate limiter: a single video generates
+  // many Range requests (every seek), which would otherwise trip the per-IP limit.
+  app.use("/media", mediaRouter);
+
   app.use("/", apiLimiter);
   app.use("/auth", authRouter);
   app.use("/storage", storageRouter);
@@ -52,6 +58,7 @@ export function createApp(): Express {
   app.use("/screenshots", screenshotsRouter);
   app.use("/share", shareRouter);
   app.use("/reactions", reactionsRouter);
+  app.use("/comments", commentsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

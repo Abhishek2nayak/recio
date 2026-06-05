@@ -47,6 +47,34 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload {
   return decoded as RefreshTokenPayload;
 }
 
+export interface PlaybackTokenPayload {
+  sub: string; // owner user id (whose cloud holds the bytes)
+  mid: string; // media id this token is scoped to
+  type: "playback";
+}
+
+/**
+ * Short-lived token that authorizes streaming ONE media item's bytes through our
+ * proxy. Embedded in the playback URL (query param) because a <video>/<img> src
+ * can't carry an Authorization header. Scoped to a single media id so a leaked URL
+ * can't be used to enumerate other files.
+ */
+export function signPlaybackToken(ownerId: string, mediaId: string): string {
+  return jwt.sign(
+    { sub: ownerId, mid: mediaId, type: "playback" } satisfies PlaybackTokenPayload,
+    env.JWT_ACCESS_SECRET,
+    { expiresIn: "12h" } as SignOptions,
+  );
+}
+
+export function verifyPlaybackToken(token: string): PlaybackTokenPayload {
+  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
+  if (typeof decoded === "string" || decoded.type !== "playback" || !decoded.sub || !decoded.mid) {
+    throw new Error("Not a playback token");
+  }
+  return decoded as PlaybackTokenPayload;
+}
+
 /**
  * Short-lived `state` token for the Drive OAuth redirect flow. Carries the user id
  * through the round-trip to Google so the (unauthenticated) GET callback can tell

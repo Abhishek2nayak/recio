@@ -9,7 +9,7 @@
  *   GET  /auth/me         current user (requires access token)
  *
  * Session = short access JWT in the body + a rotating refresh JWT in an httpOnly
- * cookie. New users get a default FLOWCAP storage connection so "Save to FlowCap"
+ * cookie. New users get a default FLOWCAP storage connection so "Save to Recio"
  * works before they connect Drive.
  */
 import { Router } from "express";

@@ -1,5 +1,5 @@
 /**
- * Loads the capture pages' shared context: the FlowCap session + which storage
+ * Loads the capture pages' shared context: the Recio session + which storage
  * destination to default to. Degrades gracefully if the backend is unreachable
  * (still lets you record; the upload step will surface any error).
  */

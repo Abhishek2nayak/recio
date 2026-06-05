@@ -2,22 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* FlowCap design tokens — mirror of @flowcap/shared rootCss(). Dark-mode first. */
+/* FlowCap design tokens — mirror of @flowcap/shared rootCss(). Light-mode. */
 :root {
-  --bg-primary: #0a0a0b;
-  --bg-secondary: #111113;
-  --bg-card: #18181b;
-  --border: #27272a;
-  --text-primary: #fafafa;
-  --text-muted: #71717a;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --warning: #f59e0b;
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --border: #e5e5ea;
+  --text-primary: #1d1d1f;
+  --text-muted: #6e6e73;
+  --accent: #1a1a1a;
+  --accent-hover: #000000;
+  --highlight: #ccff00;
+  --highlight-hover: #bbee00;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
   --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -45,7 +47,7 @@ body {
   height: 11px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: #d4d4d8;
   border-radius: 9999px;
   border: 3px solid var(--bg-primary);
 }
@@ -53,14 +55,26 @@ body {
   background: transparent;
 }
 
-/* Loading skeleton shimmer surface. */
+/* Loading skeleton shimmer surface (light). */
 .skeleton {
-  background: linear-gradient(90deg, #18181b 0px, #222226 120px, #18181b 240px);
+  background: linear-gradient(90deg, #ececef 0px, #f6f6f8 120px, #ececef 240px);
   background-size: 800px 100%;
 }
 
 /* Subtle dotted grid used on the landing hero. */
 .dot-grid {
-  background-image: radial-gradient(circle, #27272a 1px, transparent 1px);
+  background-image: radial-gradient(circle, #d4d4d8 1px, transparent 1px);
   background-size: 22px 22px;
+}
+
+/* Serif display face for the (light) marketing landing. */
+.font-display {
+  font-family: "Fraunces", "Georgia", serif;
+  letter-spacing: -0.01em;
+}
+
+/* Light dotted grid for the landing hero. */
+.dot-grid-light {
+  background-image: radial-gradient(circle, rgba(15, 23, 42, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
 }

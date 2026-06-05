@@ -18,12 +18,14 @@ import {
   type InitiateServerUploadInput,
   type InitiateDriveUploadResult,
   type InitiateServerUploadResult,
+  type InitiateDropboxUploadResult,
 } from "@flowcap/shared";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/error.js";
 import { requireAuth, getUserId } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { initiateResumableUpload } from "../services/drive-service.js";
+import { getUploadGrant } from "../services/dropbox-service.js";
 import { createSignedUpload } from "../services/supabase-storage.js";
 import { setMediaVisibility } from "../services/media-service.js";
 import { toRecordingDTO, toScreenshotDTO } from "../lib/dto.js";
@@ -66,6 +68,20 @@ uploadRouter.post(
     const { fileName, mimeType } = req.body as InitiateDriveUploadInput;
     const { sessionUri, folderId } = await initiateResumableUpload(userId, { fileName, mimeType });
     const result: InitiateDriveUploadResult = { sessionUri, folderId };
+    res.json(ok(result));
+  }),
+);
+
+uploadRouter.post(
+  "/dropbox/initiate",
+  requireAuth,
+  validate(initiateDriveUploadSchema),
+  asyncHandler(async (req, res) => {
+    const userId = getUserId(req);
+    const { fileName, resourceType } = req.body as InitiateDriveUploadInput;
+    const folder = resourceType === ResourceType.RECORDING ? "recordings" : "screenshots";
+    const grant = await getUploadGrant(userId, `${Date.now()}-${safeSegment(fileName)}`, folder);
+    const result: InitiateDropboxUploadResult = { accessToken: grant.accessToken, path: grant.path };
     res.json(ok(result));
   }),
 );

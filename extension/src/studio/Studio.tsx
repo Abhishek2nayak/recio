@@ -10,7 +10,6 @@ import { useEffect, useRef, useState } from "react";
 import { StorageProvider, formatDuration } from "@flowcap/shared";
 import { ScreenRecorder, type RecordingResult } from "../recorder/screenRecorder.js";
 import { publishCapture } from "../storage/publish.js";
-import { RecordingToolbar } from "../components/RecordingToolbar.js";
 import { Button, Spinner, StorageBadge } from "../components/ui.js";
 import { useFlowcap } from "../lib/useFlowcap.js";
 import { getSettings, setSettings, QUALITY_PRESETS, type RecordingQuality, type Settings } from "../lib/storage.js";
@@ -31,9 +30,14 @@ function defaultTitle(): string {
   return `Recording — ${stamp}`;
 }
 
+/** "whiteboard" → record the embedded Excalidraw canvas; default "screen". */
+const recordMode: "screen" | "whiteboard" =
+  new URLSearchParams(window.location.search).get("mode") === "whiteboard" ? "whiteboard" : "screen";
+
 export function Studio() {
   const ctx = useFlowcap();
   const recorderRef = useRef<ScreenRecorder | null>(null);
+  const previewRef = useRef<HTMLVideoElement | null>(null);
   const finishingRef = useRef(false);
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
@@ -59,6 +63,17 @@ export function Studio() {
       setPhase("idle");
     });
   }, [ctx.loading, ctx.session]);
+
+  // Mirror the captured display stream into the studio's live preview element.
+  useEffect(() => {
+    if (phase !== "recording" && phase !== "paused") return;
+    const v = previewRef.current;
+    const stream = recorderRef.current?.previewStream ?? null;
+    if (v && stream && v.srcObject !== stream) {
+      v.srcObject = stream;
+      void v.play().catch(() => {});
+    }
+  }, [phase]);
 
   // Live timer + broadcast state to the SW so the on-page bar can mirror it.
   useEffect(() => {
@@ -115,6 +130,7 @@ export function Studio() {
         micDeviceId: settings.micDeviceId,
         frameRate: preset.frameRate,
         videoBitsPerSecond: preset.videoBitsPerSecond,
+        preferCurrentTab: recordMode === "whiteboard",
         // Native "Stop sharing" / closing the shared window ends the recording on
         // its own — finalize + upload automatically so nothing gets stuck.
         onEnded: (result) => void finishRecording(result),
@@ -211,9 +227,81 @@ export function Studio() {
       <Centered>
         <div className="max-w-sm text-center">
           <h1 className="text-lg font-semibold">Sign in to record</h1>
-          <p className="mt-2 text-sm text-muted">Open the FlowCap toolbar popup to sign in, then start here.</p>
+          <p className="mt-2 text-sm text-muted">Open the Recio toolbar popup to sign in, then start here.</p>
         </div>
       </Centered>
+    );
+  }
+
+  // ── Whiteboard mode: full-bleed Excalidraw canvas (embedded) + record controls ──
+  if (recordMode === "whiteboard" && ["idle", "countdown", "recording", "paused"].includes(phase)) {
+    return (
+      <div className="relative h-screen w-screen overflow-hidden bg-bg-primary">
+        <iframe
+          src={`${config.webBaseUrl}/whiteboard/embed`}
+          title="Whiteboard"
+          allow="clipboard-write; clipboard-read"
+          className="absolute inset-0 h-full w-full border-0"
+        />
+
+        {(phase === "recording" || phase === "paused") && settings?.camera && (
+          <CameraBubble deviceId={settings.cameraDeviceId} />
+        )}
+
+        {phase === "countdown" && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
+            <span className="font-mono text-[168px] font-bold leading-none text-highlight drop-shadow-[0_6px_30px_rgba(0,0,0,.45)]">
+              {countValue}
+            </span>
+          </div>
+        )}
+
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
+          {phase === "idle" && (
+            <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card/95 px-5 py-4 shadow-lg backdrop-blur">
+              <Button variant="highlight" onClick={start} className="px-5 py-2.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#0A0A0A]" /> Start recording
+              </Button>
+              <p className="flex items-center gap-1.5 text-[11px] text-muted">
+                Draw on the board · saves to <StorageBadge provider={ctx.defaultDestination} />
+              </p>
+            </div>
+          )}
+          {(phase === "recording" || phase === "paused") && (
+            <div className="flex items-center gap-3 rounded-full border border-border bg-[#0f0f11]/95 px-3 py-2 shadow-2xl backdrop-blur">
+              <button
+                onClick={() => void stop()}
+                title="Stop & save"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-danger text-white transition-transform hover:scale-105"
+              >
+                <span className="h-3.5 w-3.5 rounded-[3px] bg-white" />
+              </button>
+              <span className="flex items-center gap-1.5">
+                <span className={"h-2 w-2 rounded-full " + (phase === "recording" ? "animate-pulse bg-danger" : "bg-warning")} />
+                <span className="font-mono text-sm tabular-nums text-white">{formatDuration(elapsed / 1000)}</span>
+              </span>
+              <button
+                onClick={phase === "recording" ? pause : resume}
+                title={phase === "recording" ? "Pause" : "Resume"}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-white"
+              >
+                {phase === "recording" ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z" /></svg>
+                )}
+              </button>
+              <button
+                onClick={cancel}
+                title="Discard"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-danger/20 hover:text-danger"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     );
   }
 
@@ -283,22 +371,41 @@ export function Studio() {
       )}
 
       {(phase === "recording" || phase === "paused") && (
-        <>
-          <div className="fixed left-6 top-1/2 -translate-y-1/2">
-            <RecordingToolbar
-              state={phase}
-              elapsedMs={elapsed}
-              onStop={stop}
-              onPause={pause}
-              onResume={resume}
-              onCancel={cancel}
-            />
+        <div className="flex w-[620px] max-w-[92vw] flex-col items-center gap-5">
+          {/* Live preview of the shared screen — "what's being recorded". */}
+          <div className="relative w-full overflow-hidden rounded-xl border border-border bg-black shadow-sm">
+            <video ref={previewRef} autoPlay muted playsInline className="aspect-video w-full bg-black object-contain" />
+            <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/70 px-2.5 py-1 font-mono text-xs font-medium text-white backdrop-blur">
+              <span className={"h-2 w-2 rounded-full " + (phase === "recording" ? "animate-pulse bg-danger" : "bg-warning")} />
+              {phase === "recording" ? "REC" : "Paused"} · {formatDuration(elapsed / 1000)}
+            </span>
           </div>
-          <div className="text-center">
-            <p className="font-mono text-sm text-muted">Recording {formatDuration(elapsed / 1000)}</p>
-            <p className="mt-1 text-xs text-muted">Switch to what you're recording — the bar and camera follow you.</p>
+
+          <p className="text-center text-xs text-muted">
+            Switch to the screen, window, or tab you're recording — your controls and camera bubble follow you there.
+          </p>
+
+          <div className="flex items-center justify-center gap-2">
+            <Button variant="secondary" onClick={phase === "recording" ? pause : resume}>
+              {phase === "recording" ? (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z" /></svg>
+              )}
+              {phase === "recording" ? "Pause" : "Resume"}
+            </Button>
+            <Button variant="highlight" onClick={() => void stop()}>
+              <span className="h-3 w-3 rounded-[3px] bg-[#0A0A0A]" /> Stop &amp; save
+            </Button>
+            <Button variant="ghost" className="hover:text-danger" onClick={cancel}>
+              Discard
+            </Button>
           </div>
-        </>
+
+          <p className="flex items-center gap-1.5 text-xs text-muted">
+            Saves to <StorageBadge provider={ctx.defaultDestination} /> automatically
+          </p>
+        </div>
       )}
 
       {phase === "uploading" && (
@@ -401,5 +508,30 @@ function Toggle({
 function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-bg-primary p-6">{children}</div>
+  );
+}
+
+/** Presenter webcam bubble over the whiteboard (captured by the tab recording). */
+function CameraBubble({ deviceId }: { deviceId: string }) {
+  const ref = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    navigator.mediaDevices
+      .getUserMedia({
+        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" },
+        audio: false,
+      })
+      .then((s) => {
+        stream = s;
+        if (ref.current) ref.current.srcObject = s;
+      })
+      .catch(() => {});
+    return () => stream?.getTracks().forEach((t) => t.stop());
+  }, [deviceId]);
+
+  return (
+    <div className="absolute bottom-6 left-6 h-40 w-40 overflow-hidden rounded-full border-[3px] border-white/90 bg-black shadow-2xl">
+      <video ref={ref} autoPlay muted playsInline className="h-full w-full object-cover" />
+    </div>
   );
 }

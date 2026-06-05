@@ -40,6 +40,24 @@ export async function publishScreenshot(blob: Blob, title: string): Promise<Publ
     });
     const res = await fetchPut(sessionUri, blob, { "Content-Type": ImageMimeType.PNG });
     storageFileId = ((await res.json()) as { id: string }).id;
+  } else if (destination === StorageProvider.DROPBOX) {
+    const { accessToken, path } = await api.initiateDropboxUpload({
+      fileName,
+      mimeType: ImageMimeType.PNG,
+      sizeBytes: blob.size,
+      resourceType: ResourceType.SCREENSHOT,
+    });
+    const res = await fetch("https://content.dropboxapi.com/2/files/upload", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Dropbox-API-Arg": JSON.stringify({ path, mode: "add", autorename: true, mute: true }),
+        "Content-Type": "application/octet-stream",
+      },
+      body: blob,
+    });
+    if (!res.ok) throw new Error(`Dropbox upload failed (${res.status})`);
+    storageFileId = ((await res.json()) as { path_lower?: string }).path_lower ?? path;
   } else {
     const { signedUrl, path } = await api.initiateServerUpload({
       fileName,

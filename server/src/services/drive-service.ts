@@ -6,6 +6,7 @@
  * which PUTs the file straight to Drive. Everything else here — folder creation,
  * the "anyone with link" permission toggle, deletion — is lightweight metadata work.
  */
+import type { Readable } from "node:stream";
 import { google } from "googleapis";
 import { OAuth2Client } from "google-auth-library";
 import { DRIVE_ROOT_FOLDER_NAME, ErrorCode } from "@flowcap/shared";
@@ -50,7 +51,7 @@ async function getClient(userId: string): Promise<{ client: OAuth2Client; conn: 
   return { client: buildClient(conn), conn };
 }
 
-/** Find (or create) the user's FlowCap folder, caching its id on the connection. */
+/** Find (or create) the user's Recio folder, caching its id on the connection. */
 async function ensureFolder(
   client: OAuth2Client,
   conn: StorageConnection,
@@ -76,7 +77,7 @@ async function ensureFolder(
     fields: "id",
   });
   const id = created.data.id;
-  if (!id) throw new HttpError(ErrorCode.DRIVE_API_ERROR, "Could not create the FlowCap folder.");
+  if (!id) throw new HttpError(ErrorCode.DRIVE_API_ERROR, "Could not create the Recio folder.");
   await setDriveFolderId(conn.id, id);
   return id;
 }
@@ -159,6 +160,40 @@ export async function deleteFile(userId: string, fileId: string): Promise<void> 
 
 export function driveViewUrl(fileId: string): string {
   return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+export interface DriveStream {
+  stream: Readable;
+  status: number;
+  headers: Record<string, string>;
+}
+
+/**
+ * Stream a Drive file's RAW bytes (alt=media), forwarding the caller's Range header
+ * so the browser can seek. This is what backs playback: we serve the original webm
+ * to a native <video> element instead of relying on Drive's preview transcoder,
+ * which is flaky for MediaRecorder webm (no Cues/duration index) and lags while
+ * Drive "processes" a freshly uploaded file.
+ */
+export async function streamFile(
+  userId: string,
+  fileId: string,
+  range?: string,
+): Promise<DriveStream> {
+  const { client } = await getClient(userId);
+  const drive = google.drive({ version: "v3", auth: client });
+  const res = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "stream", headers: range ? { Range: range } : {} },
+  );
+
+  const headers: Record<string, string> = { "accept-ranges": "bytes" };
+  const src = res.headers as Record<string, unknown>;
+  for (const key of ["content-type", "content-length", "content-range"]) {
+    const v = src[key];
+    if (v != null) headers[key] = String(v);
+  }
+  return { stream: res.data as unknown as Readable, status: res.status, headers };
 }
 
 /** Best-effort Drive quota (bytes). Returns null if it can't be fetched. */

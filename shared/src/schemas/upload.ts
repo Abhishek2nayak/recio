@@ -25,7 +25,17 @@ export interface InitiateDriveUploadResult {
 }
 
 /**
- * Ask the server to mint a Supabase signed upload URL for the "Save to FlowCap"
+ * Ask the server for a Dropbox upload grant. Dropbox uploads need the token in the
+ * request header, so the server relays a short-lived access token + the target path;
+ * the client uploads straight to Dropbox's content API.
+ */
+export interface InitiateDropboxUploadResult {
+  accessToken: string;
+  path: string;
+}
+
+/**
+ * Ask the server to mint a Supabase signed upload URL for the "Save to Recio"
  * path. The server returns a one-time URL + token scoped to a single object path;
  * the client uploads the bytes straight to Supabase Storage (never through us).
  */

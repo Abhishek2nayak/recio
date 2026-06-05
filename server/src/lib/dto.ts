@@ -8,6 +8,7 @@ import {
   LinkVisibility,
   ResourceType,
   StorageProvider,
+  entitlementsFor,
   type RecordingDTO,
   type ScreenshotDTO,
   type StorageConnectionDTO,
@@ -21,6 +22,7 @@ export function toUserDTO(u: User): UserDTO {
     name: u.name,
     avatar: u.avatar,
     plan: u.plan,
+    entitlements: entitlementsFor(u.plan),
     createdAt: u.createdAt.toISOString(),
   };
 }

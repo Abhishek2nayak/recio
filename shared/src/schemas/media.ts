@@ -6,7 +6,7 @@ const storageProviderSchema = z.nativeEnum(StorageProvider);
 
 /**
  * Metadata-create payload, posted AFTER the bytes have landed in storage (Drive or
- * FlowCap S3). The server already knows the owner from the JWT.
+ * Recio S3). The server already knows the owner from the JWT.
  */
 export const createRecordingSchema = z.object({
   title: z.string().trim().min(1).max(200),

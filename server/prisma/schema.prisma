@@ -15,10 +15,20 @@ datasource db {
 enum Plan {
   FREE
   PRO
+  BUSINESS
+}
+
+enum SubStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
 }
 
 enum StorageProvider {
   DRIVE
+  DROPBOX
   FLOWCAP
 }
 
@@ -39,15 +49,57 @@ model User {
   avatar       String?
   passwordHash String? // null for Google-only accounts
   googleId     String? @unique
-  plan         Plan    @default(FREE)
+  plan         Plan    @default(FREE) // denormalized entitlement; billing truth lives on Subscription
+  stripeCustomerId String? @unique
 
   storageConnections StorageConnection[]
   recordings         Recording[]
   screenshots        Screenshot[]
   shares             Share[]
+  subscription       Subscription?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/**
+ * The billing source of truth, synced from Stripe webhooks. `User.plan` is the
+ * fast-read denormalization of this row's `plan` (flipped only by webhook handlers).
+ */
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  stripeSubscriptionId String    @unique
+  stripePriceId        String
+  plan                 Plan
+  status               SubStatus
+  seats                Int       @default(1)
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/** Idempotency guard: Stripe redelivers events, so we record processed ids. */
+model WebhookEvent {
+  id          String   @id // Stripe event id
+  processedAt DateTime @default(now())
+}
+
+/** Per-period usage meters for the metered add-ons (reset on invoice.paid). */
+model UsageCounter {
+  id          String   @id @default(cuid())
+  userId      String
+  periodStart DateTime
+  aiMinutes   Int      @default(0) // transcription minutes consumed
+  proxyBytes  BigInt   @default(0) // bytes streamed via the media.ts proxy
+  hostedBytes BigInt   @default(0) // bytes in Recio-hosted (FLOWCAP) storage
+
+  @@unique([userId, periodStart])
+  @@index([userId])
 }
 
 model StorageConnection {
@@ -158,4 +210,19 @@ model Reaction {
 
   @@unique([resourceId, emoji])
   @@index([resourceId])
+}
+
+// Comments on a media item. Polymorphic resourceId; authorUserId is set when an
+// authenticated user posts, otherwise it's a guest with just a display name.
+model Comment {
+  id           String       @id @default(cuid())
+  resourceType ResourceType
+  resourceId   String
+  authorUserId String?
+  authorName   String
+  body         String
+  timestampSec Int?
+  createdAt    DateTime     @default(now())
+
+  @@index([resourceId, createdAt])
 }

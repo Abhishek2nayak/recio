@@ -14,7 +14,7 @@
 import { sendMessage, type Message, type Rect } from "./lib/messages.js";
 import { getSettings } from "./lib/storage.js";
 
-const ACCENT = "#3B82F6";
+const ACCENT = "#CCFF00"; // electric kiwi — pairs with black text only
 const DANGER = "#EF4444";
 const CARD = "#18181B";
 const BORDER = "#27272A";
@@ -106,7 +106,7 @@ function setRecordingState(s: { active: boolean; state: "recording" | "paused"; 
 
 // ── 1b. On-page camera bubble (Loom-style, follows the visible tab) ────────────
 // The bubble is an extension-origin iframe so the camera permission is granted ONCE
-// for FlowCap (not per website). Only the *visible* tab mounts it, so there's one
+// for Recio (not per website). Only the *visible* tab mounts it, so there's one
 // camera stream at a time and the screen recording captures it wherever you are.
 let recordingActive = false;
 let cameraEl: HTMLElement | null = null;
@@ -244,6 +244,37 @@ function showToast(title: string, shareUrl?: string | null, error?: string): voi
   setTimeout(() => toast.remove(), error ? 7000 : 12000);
 }
 
+// ── 4. Pre-roll countdown (shown on the active tab before recording begins) ────
+let countdownEl: HTMLElement | null = null;
+
+function showCountdown(seconds: number): void {
+  countdownEl?.remove();
+  const el = document.createElement("div");
+  el.className = "fc-count";
+  root().appendChild(el);
+  countdownEl = el;
+
+  let n = seconds;
+  const render = () => {
+    el.textContent = String(n);
+    el.style.animation = "none";
+    // restart the pop animation each tick
+    void el.offsetWidth;
+    el.style.animation = "fc-count-pop .8s ease-out";
+  };
+  render();
+  const iv = window.setInterval(() => {
+    n -= 1;
+    if (n <= 0) {
+      clearInterval(iv);
+      el.remove();
+      if (countdownEl === el) countdownEl = null;
+    } else {
+      render();
+    }
+  }, 800);
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 function makeDraggable(el: HTMLElement, handle: HTMLElement): void {
   let ox = 0;
@@ -278,6 +309,9 @@ chrome.runtime.onMessage.addListener((message: Message) => {
       break;
     case "SHOW_TOAST":
       showToast(message.title, message.shareUrl, message.error);
+      break;
+    case "SHOW_COUNTDOWN":
+      showCountdown(message.seconds);
       break;
   }
 });
@@ -320,8 +354,8 @@ const CSS = `
 .fc-sel-hint { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
   background: ${CARD}; border: 1px solid ${BORDER}; color: ${TEXT}; font-size: 13px;
   padding: 8px 14px; border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
-.fc-sel-full { background: ${ACCENT}; color: #fff; border: none; border-radius: 6px;
-  padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.fc-sel-full { background: ${ACCENT}; color: #0A0A0A; border: none; border-radius: 6px;
+  padding: 2px 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .fc-kbd { font-family: ui-monospace, monospace; background: ${BORDER}; padding: 1px 6px; border-radius: 4px; }
 
 .fc-toast { position: fixed; right: 20px; bottom: 20px; width: 340px; pointer-events: auto;
@@ -337,8 +371,13 @@ const CSS = `
 .fc-toast-link { display: flex; gap: 8px; margin-top: 10px; }
 .fc-toast-link input { flex: 1; background: #111113; border: 1px solid ${BORDER}; border-radius: 6px;
   color: ${TEXT}; font-family: ui-monospace, monospace; font-size: 11px; padding: 6px 8px; outline: none; }
-.fc-toast-copy { background: ${ACCENT}; color: #fff; border: none; border-radius: 6px; padding: 0 12px;
-  font-size: 12px; font-weight: 500; cursor: pointer; }
+.fc-toast-copy { background: ${ACCENT}; color: #0A0A0A; border: none; border-radius: 6px; padding: 0 12px;
+  font-size: 12px; font-weight: 600; cursor: pointer; }
+
+.fc-count { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; font-family: ui-monospace, monospace; font-weight: 700;
+  font-size: 168px; line-height: 1; color: ${ACCENT}; text-shadow: 0 6px 30px rgba(0,0,0,.55); }
+@keyframes fc-count-pop { 0% { transform: scale(.55); opacity: 0; } 30% { opacity: 1; } 100% { transform: scale(1.25); opacity: 0; } }
 
 .fc-cam { position: fixed; left: 24px; bottom: 24px; width: 160px; height: 160px; border-radius: 999px;
   overflow: hidden; border: 3px solid rgba(255,255,255,.9); box-shadow: 0 12px 32px rgba(0,0,0,.55);

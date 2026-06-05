@@ -31,7 +31,7 @@ export function Login() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Sign in to your FlowCap library."
+      subtitle="Sign in to your Recio library."
       footer={
         <>
           New here?{" "}

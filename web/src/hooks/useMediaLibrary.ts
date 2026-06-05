@@ -2,7 +2,7 @@
  * Dashboard data: fetches recordings and/or screenshots per the active filter,
  * merges them under the chosen sort, and exposes cursor-based "load more". The
  * type filter (recordings vs screenshots) picks which endpoints to hit; the
- * provider filter (Drive vs FlowCap) is passed through to the server.
+ * provider filter (Drive vs Recio) is passed through to the server.
  */
 import { useCallback, useEffect, useState } from "react";
 import { type MediaDTO } from "@flowcap/shared";

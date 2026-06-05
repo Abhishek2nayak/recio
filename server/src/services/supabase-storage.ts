@@ -1,5 +1,5 @@
 /**
- * Supabase Storage — backs the "Save to FlowCap" path.
+ * Supabase Storage — backs the "Save to Recio" path.
  *
  * The server (service-role key) mints a one-time signed UPLOAD url; the client PUTs
  * the bytes straight to Supabase (never through us). Playback uses short-lived
@@ -45,7 +45,7 @@ export async function createSignedUpload(path: string): Promise<SignedUpload> {
   return { path: data.path, signedUrl: absolute(data.signedUrl), token: data.token };
 }
 
-/** Short-lived signed download URL used for playback of FlowCap-stored media. */
+/** Short-lived signed download URL used for playback of Recio-stored media. */
 export async function createSignedDownloadUrl(
   path: string,
   ttlSeconds = env.SIGNED_URL_TTL,

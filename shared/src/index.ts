@@ -11,6 +11,7 @@
 // constants
 export * from "./constants/enums.js";
 export * from "./constants/errors.js";
+export * from "./constants/entitlements.js";
 export * from "./constants/limits.js";
 export * from "./constants/reactions.js";
 
@@ -20,6 +21,7 @@ export * from "./types/models.js";
 
 // schemas (Zod values + inferred types)
 export * from "./schemas/auth.js";
+export * from "./schemas/comment.js";
 export * from "./schemas/media.js";
 export * from "./schemas/reaction.js";
 export * from "./schemas/share.js";

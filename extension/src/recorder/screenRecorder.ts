@@ -19,6 +19,8 @@ export interface RecorderOptions {
   frameRate?: number;
   /** MediaRecorder target video bitrate (bits/sec). */
   videoBitsPerSecond?: number;
+  /** Whiteboard mode: pre-select the current tab in the picker (one-click capture). */
+  preferCurrentTab?: boolean;
   /** Fired when the recording ends on its own (native stop / window closed). */
   onEnded?: (result: RecordingResult) => void;
 }
@@ -66,15 +68,20 @@ export class ScreenRecorder {
     this.pendingResolve = null;
     this.onEndedCb = options.onEnded ?? null;
 
-    this.displayStream = await navigator.mediaDevices.getDisplayMedia({
-      // Casting because `displaySurface` isn't in the lib DOM types yet; passing it
-      // surfaces all three options (monitor/window/browser) in the native picker.
-      video: {
-        ...({ displaySurface: "monitor" } as MediaTrackConstraints),
-        ...(options.frameRate ? { frameRate: { ideal: options.frameRate } } : {}),
-      },
-      audio: true,
-    });
+    const videoConstraints: MediaTrackConstraints = {
+      // For whiteboard mode we don't bias toward the monitor — the current tab
+      // (the Excalidraw canvas) should be the default pick.
+      ...(options.preferCurrentTab ? {} : ({ displaySurface: "monitor" } as MediaTrackConstraints)),
+      ...(options.frameRate ? { frameRate: { ideal: options.frameRate } } : {}),
+    };
+    this.displayStream = await navigator.mediaDevices.getDisplayMedia(
+      // `preferCurrentTab` + `displaySurface` aren't in the lib DOM types yet.
+      {
+        video: videoConstraints,
+        audio: true,
+        ...(options.preferCurrentTab ? { preferCurrentTab: true } : {}),
+      } as DisplayMediaStreamOptions,
+    );
 
     const audioTracks = await this.buildAudioTracks(options.microphone === true, options.micDeviceId);
     const combined = new MediaStream([...this.displayStream.getVideoTracks(), ...audioTracks]);
@@ -142,6 +149,11 @@ export class ScreenRecorder {
 
   get state(): "inactive" | "recording" | "paused" {
     return this.recorder?.state ?? "inactive";
+  }
+
+  /** The captured display stream — for a muted on-screen preview in the studio. */
+  get previewStream(): MediaStream | null {
+    return this.displayStream;
   }
 
   get elapsedMs(): number {

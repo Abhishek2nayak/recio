@@ -10,19 +10,22 @@
 export const StorageProvider = {
   /** The user's own Google Drive. */
   DRIVE: "DRIVE",
-  /** FlowCap's own S3-compatible storage. */
+  /** The user's own Dropbox. */
+  DROPBOX: "DROPBOX",
+  /** Recio's own S3-compatible storage. */
   FLOWCAP: "FLOWCAP",
 } as const;
 export type StorageProvider = (typeof StorageProvider)[keyof typeof StorageProvider];
 
-/** Account plan. Limits are scaffolded (see `limits.ts`) but not enforced in MVP. */
+/** Account plan. Capabilities per plan live in `entitlements.ts`. */
 export const Plan = {
   FREE: "FREE",
   PRO: "PRO",
+  BUSINESS: "BUSINESS",
 } as const;
 export type Plan = (typeof Plan)[keyof typeof Plan];
 
-/** The two kinds of media FlowCap manages. */
+/** The two kinds of media Recio manages. */
 export const ResourceType = {
   RECORDING: "RECORDING",
   SCREENSHOT: "SCREENSHOT",
@@ -54,7 +57,7 @@ export const DisplaySurface = {
 } as const;
 export type DisplaySurface = (typeof DisplaySurface)[keyof typeof DisplaySurface];
 
-/** MIME types FlowCap produces/accepts. */
+/** MIME types Recio produces/accepts. */
 export const VideoMimeType = {
   WEBM: "video/webm",
   MP4: "video/mp4",

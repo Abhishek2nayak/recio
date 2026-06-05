@@ -53,7 +53,7 @@ export async function connectDrive(): Promise<void> {
 /**
  * "Sign in with Google" for the extension. Same launchWebAuthFlow code flow as Drive
  * connect, but with sign-in scopes; the backend exchanges the code and returns a
- * FlowCap session for the same account you'd get on the website.
+ * Recio session for the same account you'd get on the website.
  */
 export async function signInWithGoogle(): Promise<Session> {
   if (!config.googleClientId) {

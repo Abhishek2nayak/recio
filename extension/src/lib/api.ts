@@ -11,6 +11,7 @@ import type {
   CreateShareInput,
   InitiateDriveUploadInput,
   InitiateDriveUploadResult,
+  InitiateDropboxUploadResult,
   InitiateServerUploadInput,
   InitiateServerUploadResult,
   RecordingDTO,
@@ -111,6 +112,11 @@ export const api = {
       method: "POST",
       body: { code, redirectUri },
     }),
+  dropboxCallback: (code: string, redirectUri: string) =>
+    request<{ connection: StorageConnectionDTO }>("/storage/dropbox/callback", {
+      method: "POST",
+      body: { code, redirectUri },
+    }),
   driveConsentUrl: () => request<{ url: string }>("/storage/drive/connect"),
   setDefaultProvider: (provider: StorageProvider) =>
     request<{ defaultProvider: StorageProvider }>("/storage/default", { method: "PATCH", body: { provider } }),
@@ -118,6 +124,8 @@ export const api = {
   // ── upload coordination ──
   initiateDriveUpload: (body: InitiateDriveUploadInput) =>
     request<InitiateDriveUploadResult>("/upload/drive/initiate", { method: "POST", body }),
+  initiateDropboxUpload: (body: InitiateDriveUploadInput) =>
+    request<InitiateDropboxUploadResult>("/upload/dropbox/initiate", { method: "POST", body }),
   initiateServerUpload: (body: InitiateServerUploadInput) =>
     request<InitiateServerUploadResult>("/upload/server", { method: "POST", body }),
 

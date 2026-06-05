@@ -11,7 +11,7 @@ export const createShareSchema = z.object({
 export type CreateShareInput = z.infer<typeof createShareSchema>;
 
 /**
- * Flip a Drive-backed (or FlowCap-backed) link between "Anyone with link" and
+ * Flip a Drive-backed (or Recio-backed) link between "Anyone with link" and
  * "Private". For Drive media the server applies this against the Drive API.
  */
 export const updateSharePermissionSchema = z.object({

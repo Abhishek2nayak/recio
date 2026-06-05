@@ -3,23 +3,25 @@
 @tailwind utilities;
 
 /* Design tokens as CSS variables (mirrors @flowcap/shared `rootCss()`), so raw CSS
-   and Tailwind arbitrary values read from one source. Dark-mode first. */
+   and Tailwind arbitrary values read from one source. Light-mode. */
 :root {
-  --bg-primary: #0a0a0b;
-  --bg-secondary: #111113;
-  --bg-card: #18181b;
-  --border: #27272a;
-  --text-primary: #fafafa;
-  --text-muted: #71717a;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --warning: #f59e0b;
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --border: #e5e5ea;
+  --text-primary: #1d1d1f;
+  --text-muted: #6e6e73;
+  --accent: #1a1a1a;
+  --accent-hover: #000000;
+  --highlight: #ccff00;
+  --highlight-hover: #bbee00;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
   --font-sans: "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {

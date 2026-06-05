@@ -1,14 +1,17 @@
-/** Shared UI primitives on the FlowCap palette (web). */
+/** Shared UI primitives on the Recio palette (web). */
 import { clsx } from "clsx";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { StorageProvider } from "@flowcap/shared";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "highlight" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
 
 const VARIANTS: Record<Variant, string> = {
+  // Ink button: near-black with white text — the default primary action.
   primary: "bg-accent hover:bg-accent-hover text-white shadow-sm",
-  secondary: "bg-card border border-border hover:border-muted text-text-primary",
+  // Electric-kiwi pop, reserved for the headline brand action; black foreground only.
+  highlight: "bg-highlight hover:bg-highlight-hover text-[#0A0A0A] font-semibold shadow-sm",
+  secondary: "bg-card border border-border hover:border-muted text-text-primary shadow-sm",
   ghost: "bg-transparent hover:bg-card text-muted hover:text-text-primary",
   danger: "bg-danger/10 border border-danger/30 text-danger hover:bg-danger/20",
 };
@@ -66,18 +69,24 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
+const BADGE: Record<StorageProvider, { label: string; tone: string; dot: string }> = {
+  DRIVE: { label: "Drive", tone: "bg-accent/15 text-accent", dot: "bg-accent" },
+  DROPBOX: { label: "Dropbox", tone: "bg-[#0061FF]/15 text-[#4c8dff]", dot: "bg-[#0061FF]" },
+  FLOWCAP: { label: "Recio", tone: "bg-success/15 text-success", dot: "bg-success" },
+};
+
 export function StorageBadge({ provider, className }: { provider: StorageProvider; className?: string }) {
-  const isDrive = provider === StorageProvider.DRIVE;
+  const b = BADGE[provider] ?? BADGE.FLOWCAP;
   return (
     <span
       className={clsx(
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px] font-medium",
-        isDrive ? "bg-accent/15 text-accent" : "bg-success/15 text-success",
+        b.tone,
         className,
       )}
     >
-      <span className={clsx("h-1.5 w-1.5 rounded-full", isDrive ? "bg-accent" : "bg-success")} />
-      {isDrive ? "Drive" : "FlowCap"}
+      <span className={clsx("h-1.5 w-1.5 rounded-full", b.dot)} />
+      {b.label}
     </span>
   );
 }
@@ -109,6 +118,6 @@ export function EmptyState({
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={clsx("rounded-lg border border-border bg-card", className)}>{children}</div>
+    <div className={clsx("rounded-xl border border-border bg-card shadow-sm", className)}>{children}</div>
   );
 }

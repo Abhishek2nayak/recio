@@ -105,6 +105,16 @@ export async function findMediaByResource(
     : prisma.screenshot.findFirst({ where: { id: resourceId, deletedAt: null } });
 }
 
+/** Fetch an owned media row (recording OR screenshot) by id — used by the stream proxy. */
+export async function findOwnedMediaById(
+  userId: string,
+  id: string,
+): Promise<Recording | Screenshot | null> {
+  const recording = await findOwnedRecording(userId, id);
+  if (recording) return recording;
+  return findOwnedScreenshot(userId, id);
+}
+
 /** Resolve a public media row by its share token (used by the public share route). */
 export async function findByShareToken(
   token: string,

@@ -67,7 +67,12 @@ screenshotsRouter.get(
   asyncHandler(async (req, res) => {
     const screenshot = await findOwnedScreenshot(getUserId(req), param(req, "id"));
     if (!screenshot) throw HttpError.notFound("Screenshot not found.");
-    const playbackUrl = await getPlaybackUrl(screenshot.storageProvider, screenshot.storageFileId);
+    const playbackUrl = await getPlaybackUrl(
+      screenshot.userId,
+      screenshot.storageProvider,
+      screenshot.storageFileId,
+      screenshot.id,
+    );
     res.json(ok({ screenshot: toScreenshotDTO(screenshot), playbackUrl }));
   }),
 );

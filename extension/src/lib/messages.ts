@@ -33,12 +33,23 @@ export interface Rect {
 
 export type Message =
   // popup / shortcuts → SW
-  | { type: "OPEN_STUDIO" }
+  | { type: "OPEN_STUDIO"; mode?: "screen" | "whiteboard" }
+  | { type: "START_RECORDING" } // (legacy offscreen path; unused — recording runs in the studio page)
   | { type: "CAPTURE_SCREENSHOT" } // kicks off on-page region selection
   | { type: "GET_UPLOADS" }
+  // SW → offscreen document (the actual recorder)
+  | { type: "OFFSCREEN_START"; streamId: string }
+  | { type: "OFFSCREEN_CONTROL"; action: "pause" | "resume" | "stop" }
+  // offscreen → SW
+  | { type: "REQUEST_COUNTDOWN"; seconds: number } // ask SW to show a countdown on the active tab
+  | { type: "RECORDING_PUBLISHED"; shareUrl: string | null; mediaId: string }
+  | { type: "RECORDING_FAILED"; error: string }
+  // SW → content (active tab): show a 3-2-1 countdown before recording begins
+  | { type: "SHOW_COUNTDOWN"; seconds: number }
   // popup → SW: run OAuth in the SW (survives the popup closing during the flow)
   | { type: "SIGN_IN_GOOGLE" }
   | { type: "CONNECT_DRIVE" }
+  | { type: "CONNECT_DROPBOX" }
   // capture pages → SW (upload registry)
   | { type: "UPLOAD_STARTED"; upload: UploadState }
   | { type: "UPLOAD_PROGRESS"; id: string; progress: number }

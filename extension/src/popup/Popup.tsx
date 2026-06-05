@@ -1,13 +1,14 @@
 /**
  * Toolbar popup — the capture control surface. Structured like a recording-app setup
  * panel (capture mode → recording settings with device pickers → destination →
- * advanced options → Record / Screenshot), rendered in the FlowCap dark system.
+ * advanced options → Record / Screenshot), rendered in the Recio dark system.
  */
 import { useCallback, useEffect, useState } from "react";
 import { StorageProvider } from "@flowcap/shared";
 import { api } from "../lib/api.js";
 import { sendMessage, type UploadState } from "../lib/messages.js";
 import { listDevices, type Devices } from "../lib/devices.js";
+import { config } from "../config.js";
 import {
   getSession,
   getSettings,
@@ -26,8 +27,9 @@ export function Popup() {
   const [loading, setLoading] = useState(true);
   const [session, setSess] = useState<Session | null>(null);
   const [driveConnected, setDriveConnected] = useState(false);
+  const [dropboxConnected, setDropboxConnected] = useState(false);
   const [destination, setDestination] = useState<StorageProvider>(StorageProvider.FLOWCAP);
-  const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState<null | "drive" | "dropbox">(null);
   const [uploads, setUploads] = useState<UploadState[]>([]);
   const [statusError, setStatusError] = useState<string | null>(null);
 
@@ -45,10 +47,11 @@ export function Popup() {
     try {
       const status = await api.storageStatus();
       setDriveConnected(status.connections.some((c) => c.provider === StorageProvider.DRIVE && c.isActive));
+      setDropboxConnected(status.connections.some((c) => c.provider === StorageProvider.DROPBOX && c.isActive));
       setDestination(status.defaultProvider);
       setStatusError(null);
     } catch {
-      setStatusError("Couldn't reach the FlowCap server.");
+      setStatusError("Couldn't reach the Recio server.");
       setDestination((await getSettings()).destination);
     }
   }, []);
@@ -83,6 +86,8 @@ export function Popup() {
   }, [session]);
 
   async function record() {
+    // Recording happens on the studio page (a real extension page — it has
+    // chrome.storage + the upload pipeline; an offscreen document does not).
     await sendMessage({ type: "OPEN_STUDIO" });
     window.close();
   }
@@ -90,17 +95,21 @@ export function Popup() {
     await sendMessage({ type: "CAPTURE_SCREENSHOT" });
     window.close();
   }
+  async function whiteboard() {
+    await sendMessage({ type: "OPEN_STUDIO", mode: "whiteboard" });
+    window.close();
+  }
 
-  async function handleConnectDrive() {
-    setConnecting(true);
+  async function connect(which: "drive" | "dropbox") {
+    setConnecting(which);
     try {
-      const res = await sendMessage({ type: "CONNECT_DRIVE" });
+      const res = await sendMessage({ type: which === "drive" ? "CONNECT_DRIVE" : "CONNECT_DROPBOX" });
       if (!res.ok) throw new Error(res.error);
       await refreshStatus();
     } catch (err) {
-      setStatusError(err instanceof Error ? err.message : "Drive connection failed.");
+      setStatusError(err instanceof Error ? err.message : "Connection failed.");
     } finally {
-      setConnecting(false);
+      setConnecting(null);
     }
   }
 
@@ -159,7 +168,10 @@ export function Popup() {
     <Frame>
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
         <span className="flex items-center gap-2 text-sm font-semibold">
-          <ScreenGlyph /> FlowCap
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-highlight">
+            <RecioMark />
+          </span>
+          Recio
         </span>
         <div className="flex items-center gap-2">
           <span className="max-w-[150px] truncate font-mono text-[11px] text-muted">{session.user.email}</span>
@@ -230,15 +242,23 @@ export function Popup() {
 
         {/* Save to */}
         <Section title="Save to">
-          <div className="grid grid-cols-2 gap-2">
-            <DestChip label="FlowCap" active={destination === StorageProvider.FLOWCAP} onClick={() => chooseDestination(StorageProvider.FLOWCAP)} />
-            <DestChip label="Google Drive" active={destination === StorageProvider.DRIVE} disabled={!driveConnected} onClick={() => chooseDestination(StorageProvider.DRIVE)} />
+          <div className="grid grid-cols-3 gap-2">
+            <DestChip label="Recio" active={destination === StorageProvider.FLOWCAP} onClick={() => chooseDestination(StorageProvider.FLOWCAP)} />
+            <DestChip label="Drive" active={destination === StorageProvider.DRIVE} disabled={!driveConnected} onClick={() => chooseDestination(StorageProvider.DRIVE)} />
+            <DestChip label="Dropbox" active={destination === StorageProvider.DROPBOX} disabled={!dropboxConnected} onClick={() => chooseDestination(StorageProvider.DROPBOX)} />
           </div>
-          {!driveConnected && (
-            <Button variant="secondary" onClick={handleConnectDrive} disabled={connecting} className="w-full">
-              {connecting ? <Spinner /> : "Connect Google Drive"}
-            </Button>
-          )}
+          <div className="grid grid-cols-2 gap-2">
+            {!driveConnected && (
+              <Button variant="secondary" onClick={() => connect("drive")} disabled={connecting !== null} className="text-xs">
+                {connecting === "drive" ? <Spinner /> : "Connect Drive"}
+              </Button>
+            )}
+            {!dropboxConnected && (
+              <Button variant="secondary" onClick={() => connect("dropbox")} disabled={connecting !== null} className="text-xs">
+                {connecting === "dropbox" ? <Spinner /> : "Connect Dropbox"}
+              </Button>
+            )}
+          </div>
           {statusError && <p className="text-[11px] text-warning">{statusError}</p>}
         </Section>
 
@@ -268,13 +288,16 @@ export function Popup() {
 
         {/* Actions */}
         <div className="grid grid-cols-2 gap-2">
-          <Button onClick={record} className="py-2.5">
+          <Button variant="highlight" onClick={record} className="py-2.5">
             <RecordDot /> Record Now
           </Button>
           <Button variant="secondary" onClick={screenshot} className="py-2.5">
             <CameraGlyph /> Screenshot
           </Button>
         </div>
+        <Button variant="secondary" onClick={whiteboard} className="w-full py-2.5">
+          <BoardGlyph /> Record a whiteboard
+        </Button>
 
         {/* In-flight uploads */}
         {uploads.length > 0 && (
@@ -299,7 +322,7 @@ export function Popup() {
         )}
 
         <a
-          href="http://localhost:5173/dashboard"
+          href={`${config.webBaseUrl}/dashboard`}
           target="_blank"
           rel="noreferrer"
           className="text-center text-[11px] text-accent hover:text-accent-hover"
@@ -426,6 +449,18 @@ function DestChip({ label, active, disabled, onClick }: { label: string; active:
   );
 }
 
+function RecioMark() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 48 48" fill="none">
+      <g stroke="currentColor" strokeWidth="5.5" strokeLinecap="round">
+        <path d="M31 9.5a16 16 0 0 0-17 28" />
+        <path d="M17 38.5a16 16 0 0 0 17-28" />
+      </g>
+      <circle cx="24" cy="24" r="5" fill="currentColor" />
+    </svg>
+  );
+}
+
 function Frame({ children }: { children: React.ReactNode }) {
   return <div className="w-[368px] bg-bg-primary text-text-primary">{children}</div>;
 }
@@ -441,11 +476,14 @@ function CameraGlyph() {
 function MicGlyph() {
   return (<svg {...s}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>);
 }
+function BoardGlyph() {
+  return (<svg {...s}><rect x="2" y="4" width="20" height="13" rx="2" /><path d="M9 21h6M12 17v4M7.5 12 10 9.5l2 2 3-3.5" /></svg>);
+}
 function CheckGlyph() {
   return (<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>);
 }
 function RecordDot() {
-  return <span className="mr-0.5 inline-block h-2.5 w-2.5 rounded-full bg-white" />;
+  return <span className="mr-0.5 inline-block h-2.5 w-2.5 rounded-full bg-current" />;
 }
 function Chevron({ open }: { open: boolean }) {
   return (

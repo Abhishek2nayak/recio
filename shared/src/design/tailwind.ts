@@ -17,6 +17,8 @@ export const tailwindTheme = {
     muted: colors.textMuted,
     accent: colors.accent,
     "accent-hover": colors.accentHover,
+    highlight: colors.highlight,
+    "highlight-hover": colors.highlightHover,
     success: colors.success,
     danger: colors.danger,
     warning: colors.warning,

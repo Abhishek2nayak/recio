@@ -14,6 +14,7 @@ import type {
   StorageProvider,
   VideoMimeType,
 } from "../constants/enums.js";
+import type { Entitlements } from "../constants/entitlements.js";
 
 /** ISO-8601 timestamp string (e.g. "2026-06-02T12:00:00.000Z"). */
 export type ISODateString = string;
@@ -24,13 +25,15 @@ export interface UserDTO {
   name: string | null;
   avatar: string | null;
   plan: Plan;
+  /** Resolved capabilities for `plan` — clients gate UI off these (server re-checks). */
+  entitlements: Entitlements;
   createdAt: ISODateString;
 }
 
 export interface StorageConnectionDTO {
   id: string;
   provider: StorageProvider;
-  /** The connected Google account's email (for Drive). Null for FlowCap. */
+  /** The connected Google account's email (for Drive). Null for Recio. */
   driveEmail: string | null;
   defaultFolderId: string | null;
   isActive: boolean;
@@ -50,7 +53,7 @@ interface MediaBase {
   title: string;
   size: number;
   storageProvider: StorageProvider;
-  /** Drive file ID or FlowCap S3 object key. */
+  /** Drive file ID or Recio S3 object key. */
   storageFileId: string;
   thumbnailUrl: string | null;
   shareToken: string;
@@ -88,7 +91,7 @@ export interface ShareDTO {
 
 /**
  * Public payload returned by `GET /share/:token` (no auth). Carries just enough to
- * render the viewer — a playback URL (Drive view URL or a signed FlowCap URL) plus
+ * render the viewer — a playback URL (Drive view URL or a signed Recio URL) plus
  * lightweight media facts. Never exposes owner identity beyond a display name.
  */
 export interface PublicShareViewDTO {
@@ -97,7 +100,7 @@ export interface PublicShareViewDTO {
   resourceId: string;
   title: string;
   mimeType: VideoMimeType | ImageMimeType;
-  /** Drive view URL or a time-limited signed FlowCap URL. */
+  /** Drive view URL or a time-limited signed Recio URL. */
   playbackUrl: string;
   duration: number | null;
   viewCount: number;

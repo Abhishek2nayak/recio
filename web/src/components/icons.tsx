@@ -48,6 +48,32 @@ export const TrashIcon = (p: P) => (
     <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
   </svg>
 );
+export const MoreIcon = (p: P) => (
+  <svg {...base(p)} fill="currentColor" stroke="none">
+    <circle cx="5" cy="12" r="1.6" />
+    <circle cx="12" cy="12" r="1.6" />
+    <circle cx="19" cy="12" r="1.6" />
+  </svg>
+);
+export const BoardIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="3" y="4" width="18" height="13" rx="2" />
+    <path d="M9 21h6M12 17v4" />
+    <path d="M7.5 12 10 9.5l2 2 3-3.5" />
+  </svg>
+);
+export const GlobeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18" />
+  </svg>
+);
+export const LockIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="4" y="11" width="16" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </svg>
+);
 export const SettingsIcon = (p: P) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="3" />
@@ -83,9 +109,13 @@ export const PlayIcon = (p: P) => (
     <path d="m6 4 14 8-14 8V4z" />
   </svg>
 );
-export const Logo = (p: P) => (
-  <svg {...base({ width: 22, height: 22, ...p })}>
-    <rect x="3" y="5" width="14" height="14" rx="3" />
-    <path d="m17 10 4-2.5v9L17 14" />
+/** Recio brand mark — a teal→blue orbit swirl with a centre dot. */
+export const Logo = ({ width = 26, height = 26, ...p }: P) => (
+  <svg width={width} height={height} viewBox="0 0 48 48" fill="none" {...p}>
+    <g stroke="currentColor" strokeWidth="5.5" strokeLinecap="round" fill="none">
+      <path d="M31 9.5a16 16 0 0 0-17 28" />
+      <path d="M17 38.5a16 16 0 0 0 17-28" />
+    </g>
+    <circle cx="24" cy="24" r="5" fill="currentColor" />
   </svg>
 );

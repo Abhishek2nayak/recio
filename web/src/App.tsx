@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, type ReactNode } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { useAuthStore } from "./stores/authStore.js";
 import { AppLayout } from "./components/AppLayout.js";
+import { UpgradeModal } from "./components/UpgradeModal.js";
 import { Spinner } from "./components/ui.js";
 
 // Code-split each page so first paint (and public pages like /s/:token or /login)
@@ -10,10 +11,12 @@ const Landing = lazy(() => import("./pages/Landing.js").then((m) => ({ default: 
 const Login = lazy(() => import("./pages/Login.js").then((m) => ({ default: m.Login })));
 const Register = lazy(() => import("./pages/Register.js").then((m) => ({ default: m.Register })));
 const Dashboard = lazy(() => import("./pages/Dashboard.js").then((m) => ({ default: m.Dashboard })));
+const Whiteboard = lazy(() => import("./pages/Whiteboard.js").then((m) => ({ default: m.Whiteboard })));
 const RecordingView = lazy(() => import("./pages/RecordingView.js").then((m) => ({ default: m.RecordingView })));
 const ScreenshotView = lazy(() => import("./pages/ScreenshotView.js").then((m) => ({ default: m.ScreenshotView })));
 const Settings = lazy(() => import("./pages/Settings.js").then((m) => ({ default: m.Settings })));
 const SharePage = lazy(() => import("./pages/SharePage.js").then((m) => ({ default: m.SharePage })));
+const Pricing = lazy(() => import("./pages/Pricing.js").then((m) => ({ default: m.Pricing })));
 
 type Status = "loading" | "authed" | "guest";
 
@@ -27,6 +30,7 @@ export function App() {
 
   return (
     <Suspense fallback={<FullScreenSpinner />}>
+      <UpgradeModal />
       <Routes>
         {/* Public */}
         <Route path="/" element={<Landing />} />
@@ -47,10 +51,14 @@ export function App() {
           }
         />
         <Route path="/s/:token" element={<SharePage />} />
+        <Route path="/pricing" element={<Pricing />} />
+        {/* Public, chrome-less canvas — embedded by the extension studio to record. */}
+        <Route path="/whiteboard/embed" element={<Whiteboard />} />
 
         {/* Protected */}
         <Route element={<Protected status={status} />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/whiteboard" element={<Whiteboard />} />
           <Route path="/recordings/:id" element={<RecordingView />} />
           <Route path="/screenshots/:id" element={<ScreenshotView />} />
           <Route path="/settings" element={<Settings />} />

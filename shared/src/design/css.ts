@@ -14,6 +14,8 @@ const COLOR_VAR_NAMES: Record<keyof typeof colors, string> = {
   textMuted: "--text-muted",
   accent: "--accent",
   accentHover: "--accent-hover",
+  highlight: "--highlight",
+  highlightHover: "--highlight-hover",
   success: "--success",
   danger: "--danger",
   warning: "--warning",

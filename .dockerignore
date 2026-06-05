@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+.git
+.docker-data
+web
+extension
+reference
+*.log
+.env
+.env.*

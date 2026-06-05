@@ -29,6 +29,7 @@ export const ErrorCode = {
 
   // ── Plan / limits ──
   PLAN_LIMIT_REACHED: "PLAN_LIMIT_REACHED",
+  UPGRADE_REQUIRED: "UPGRADE_REQUIRED",
   RATE_LIMITED: "RATE_LIMITED",
 
   // ── Generic ──
@@ -53,6 +54,7 @@ export const ErrorMessage: Record<ErrorCode, string> = {
   DRIVE_API_ERROR: "Google Drive returned an error.",
   UPLOAD_FAILED: "The upload failed. Please try again.",
   PLAN_LIMIT_REACHED: "You've reached your plan's limit.",
+  UPGRADE_REQUIRED: "This feature requires a paid plan.",
   RATE_LIMITED: "Too many requests. Please slow down.",
   BAD_REQUEST: "The request could not be processed.",
   INTERNAL_ERROR: "Something went wrong on our end.",
@@ -74,6 +76,7 @@ export const ErrorStatus: Record<ErrorCode, number> = {
   DRIVE_API_ERROR: 502,
   UPLOAD_FAILED: 500,
   PLAN_LIMIT_REACHED: 403,
+  UPGRADE_REQUIRED: 402,
   RATE_LIMITED: 429,
   BAD_REQUEST: 400,
   INTERNAL_ERROR: 500,

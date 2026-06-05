@@ -104,7 +104,7 @@ shareRouter.get(
     }
 
     await incrementViewCount(type, media.id);
-    const playbackUrl = await getPlaybackUrl(media.storageProvider, media.storageFileId);
+    const playbackUrl = await getPlaybackUrl(media.userId, media.storageProvider, media.storageFileId, media.id);
     const owner = await prisma.user.findUnique({
       where: { id: media.userId },
       select: { name: true },

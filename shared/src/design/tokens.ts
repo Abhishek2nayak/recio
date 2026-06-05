@@ -1,24 +1,34 @@
 /**
- * FlowCap design tokens — the single source of truth for the visual system.
+ * Recio design tokens — the single source of truth for the visual system.
  *
- * NON-NEGOTIABLE: electric blue accent ONLY (no purple), Geist Sans + JetBrains
- * Mono (never Inter), dark-mode first. Both the web app and the extension popup
- * consume these via the generated CSS variables (see `css.ts`) and the Tailwind
- * preset (see `tailwind.ts`).
+ * Visual system: a disciplined neutral base (Apple-style off-white surfaces +
+ * near-black ink) with a single high-energy "electric kiwi" highlight used
+ * sparingly. Geist Sans + JetBrains Mono (never Inter), light-mode. Both the web
+ * app and the extension popup consume these via the generated CSS variables (see
+ * `css.ts`) and the Tailwind preset (see `tailwind.ts`).
+ *
+ * COLOR RULES:
+ *  - `accent` is the INK/action color (near-black): black buttons w/ white text,
+ *    readable links & icons. It is intentionally monochrome.
+ *  - `highlight` (#CCFF00 kiwi) is the ONLY chromatic pop — record button, active
+ *    states, badges, focus rings, progress. It MUST sit on a black foreground
+ *    (white-on-kiwi is unreadable, ~1.3:1); use sparingly so it keeps its punch.
  */
 
 export const colors = {
-  bgPrimary: "#0A0A0B", // near black
-  bgSecondary: "#111113",
-  bgCard: "#18181B",
-  border: "#27272A",
-  textPrimary: "#FAFAFA",
-  textMuted: "#71717A",
-  accent: "#3B82F6", // electric blue — the only accent hue
-  accentHover: "#2563EB",
-  success: "#22C55E",
-  danger: "#EF4444",
-  warning: "#F59E0B",
+  bgPrimary: "#F5F5F7", // warm off-white page
+  bgSecondary: "#FFFFFF",
+  bgCard: "#FFFFFF",
+  border: "#E5E5EA",
+  textPrimary: "#1D1D1F", // near-black ink (never pure #000)
+  textMuted: "#6E6E73",
+  accent: "#1A1A1A", // ink — primary action color (black buttons, links)
+  accentHover: "#000000",
+  highlight: "#CCFF00", // electric kiwi — chromatic pop; black foreground ONLY
+  highlightHover: "#BBEE00",
+  success: "#16A34A",
+  danger: "#DC2626",
+  warning: "#D97706",
 } as const;
 export type ColorToken = keyof typeof colors;
 

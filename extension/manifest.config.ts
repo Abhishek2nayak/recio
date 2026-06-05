@@ -42,7 +42,7 @@ export default defineManifest({
       run_at: "document_idle",
     },
   ],
-  permissions: ["tabs", "activeTab", "storage", "identity", "scripting", "desktopCapture"],
+  permissions: ["tabs", "activeTab", "storage", "identity", "scripting", "desktopCapture", "offscreen"],
   host_permissions: ["https://www.googleapis.com/*", "<all_urls>"],
   commands: {
     "start-screen-recording": {

@@ -67,7 +67,12 @@ recordingsRouter.get(
   asyncHandler(async (req, res) => {
     const recording = await findOwnedRecording(getUserId(req), param(req, "id"));
     if (!recording) throw HttpError.notFound("Recording not found.");
-    const playbackUrl = await getPlaybackUrl(recording.storageProvider, recording.storageFileId);
+    const playbackUrl = await getPlaybackUrl(
+      recording.userId,
+      recording.storageProvider,
+      recording.storageFileId,
+      recording.id,
+    );
     res.json(ok({ recording: toRecordingDTO(recording), playbackUrl }));
   }),
 );

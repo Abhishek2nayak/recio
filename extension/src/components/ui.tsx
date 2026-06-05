@@ -1,12 +1,14 @@
-/** Small shared UI primitives for the extension surfaces, on the FlowCap palette. */
+/** Small shared UI primitives for the extension surfaces, on the Recio palette. */
 import { clsx } from "clsx";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { StorageProvider } from "@flowcap/shared";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "highlight" | "secondary" | "ghost" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-accent hover:bg-accent-hover text-white",
+  // Electric-kiwi pop for the signature action; black foreground only.
+  highlight: "bg-highlight hover:bg-highlight-hover text-[#0A0A0A] font-semibold",
   secondary: "bg-card border border-border hover:border-muted text-text-primary",
   ghost: "bg-transparent hover:bg-card text-muted hover:text-text-primary",
   danger: "bg-danger/10 border border-danger/30 text-danger hover:bg-danger/20",
@@ -57,6 +59,17 @@ export function ProgressBar({ value }: { value: number }) {
 }
 
 export function StorageBadge({ provider }: { provider: StorageProvider }) {
+
+  function getStorageName(provider: StorageProvider) {
+    switch (provider) {
+      case "DRIVE":
+        return "Drive";
+      case "DROPBOX":
+        return "Dropbox";
+      default:
+        return "Recio";
+    }
+  }
   const isDrive = provider === "DRIVE";
   return (
     <span
@@ -65,7 +78,7 @@ export function StorageBadge({ provider }: { provider: StorageProvider }) {
         isDrive ? "bg-accent/15 text-accent" : "bg-success/15 text-success",
       )}
     >
-      {isDrive ? "Drive" : "FlowCap"}
+      {getStorageName(provider)}
     </span>
   );
 }

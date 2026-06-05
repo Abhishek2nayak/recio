@@ -98,6 +98,68 @@ export async function disconnectDrive(userId: string): Promise<void> {
   });
 }
 
+/** Generic OAuth token bundle (Drive + Dropbox share the same shape). */
+export interface OAuthTokens {
+  accessToken: string;
+  refreshToken: string | null;
+  expiryDate: Date | null;
+  email: string | null;
+}
+
+/** Load any active connection for a provider, or fail clearly. */
+export async function requireConnection(
+  userId: string,
+  provider: StorageProvider,
+): Promise<StorageConnection> {
+  const conn = await prisma.storageConnection.findFirst({
+    where: { userId, provider, isActive: true },
+  });
+  if (!conn?.refreshToken) {
+    throw new HttpError(ErrorCode.STORAGE_NOT_CONNECTED, `${provider} is not connected.`);
+  }
+  return conn;
+}
+
+/** Save (or refresh) the Dropbox connection after an OAuth exchange. */
+export async function saveDropboxConnection(
+  userId: string,
+  tokens: OAuthTokens,
+): Promise<StorageConnection> {
+  const existing = await prisma.storageConnection.findUnique({
+    where: { userId_provider: { userId, provider: StorageProvider.DROPBOX } },
+  });
+  const encryptedRefresh = tokens.refreshToken
+    ? encryptSecret(tokens.refreshToken)
+    : existing?.refreshToken ?? null;
+  if (!encryptedRefresh) {
+    throw new HttpError(
+      ErrorCode.DRIVE_AUTH_FAILED,
+      "Dropbox did not return a refresh token. Disconnect and reconnect.",
+    );
+  }
+  const data = {
+    accessToken: encryptSecret(tokens.accessToken),
+    refreshToken: encryptedRefresh,
+    expiresAt: tokens.expiryDate,
+    driveEmail: tokens.email ?? existing?.driveEmail ?? null, // reused as the account email
+    isActive: true,
+  };
+  return prisma.storageConnection.upsert({
+    where: { userId_provider: { userId, provider: StorageProvider.DROPBOX } },
+    update: data,
+    create: { userId, provider: StorageProvider.DROPBOX, ...data },
+  });
+}
+
+/** Disconnect any provider; falls back to FLOWCAP as default. */
+export async function disconnectProvider(userId: string, provider: StorageProvider): Promise<void> {
+  await prisma.storageConnection.deleteMany({ where: { userId, provider } });
+  await prisma.storageConnection.updateMany({
+    where: { userId, provider: StorageProvider.FLOWCAP },
+    data: { isDefault: true },
+  });
+}
+
 /** Make `provider` the sole default for the user. */
 export async function setDefaultProvider(userId: string, provider: StorageProvider): Promise<void> {
   const target = await prisma.storageConnection.findUnique({

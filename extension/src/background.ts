@@ -17,6 +17,7 @@ import {
 } from "./lib/messages.js";
 import { publishScreenshot } from "./storage/swPublish.js";
 import { connectDrive, signInWithGoogle } from "./auth/googleAuth.js";
+import { connectDropbox } from "./auth/dropboxAuth.js";
 import { config } from "./config.js";
 
 const uploads = new Map<string, UploadState>();
@@ -28,12 +29,78 @@ const recording: RecordingStatus & { studioTabId: number | null } = {
   studioTabId: null,
 };
 
-function studioUrl(): string {
-  return chrome.runtime.getURL("src/studio/index.html");
+function studioUrl(mode?: "screen" | "whiteboard"): string {
+  const base = chrome.runtime.getURL("src/studio/index.html");
+  return mode === "whiteboard" ? `${base}?mode=whiteboard` : base;
 }
 
-async function openStudio(): Promise<void> {
-  await chrome.tabs.create({ url: studioUrl() });
+async function openStudio(mode?: "screen" | "whiteboard"): Promise<void> {
+  await chrome.tabs.create({ url: studioUrl(mode) });
+}
+
+// ── Loom-style recording: native picker → offscreen recorder (no studio tab) ──
+const OFFSCREEN_URL = "src/offscreen/index.html";
+
+async function ensureOffscreen(): Promise<void> {
+  if (await chrome.offscreen.hasDocument()) return;
+  await chrome.offscreen.createDocument({
+    url: OFFSCREEN_URL,
+    reasons: [chrome.offscreen.Reason.DISPLAY_MEDIA, chrome.offscreen.Reason.USER_MEDIA],
+    justification: "Record the selected screen, window, or tab with microphone audio.",
+  });
+}
+
+async function closeOffscreen(): Promise<void> {
+  if (await chrome.offscreen.hasDocument()) await chrome.offscreen.closeDocument();
+}
+
+/**
+ * Start a recording the way Loom does: show the native surface picker, then hand the
+ * stream id to the offscreen recorder. No studio tab — the user stays on their own
+ * content with just the floating bar + camera bubble (injected by the content script).
+ */
+async function startRecording(): Promise<void> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+
+  try {
+    // Create the recorder document FIRST so its message listener is live before we
+    // push the (short-lived) stream id — otherwise the OFFSCREEN_START can race the
+    // listener registration and get dropped.
+    await ensureOffscreen();
+
+    const streamId = await new Promise<string>((resolve) => {
+      // `audio` adds the "Share tab/system audio" checkbox to the picker.
+      chrome.desktopCapture.chooseDesktopMedia(["screen", "window", "tab", "audio"], tab, (id) =>
+        resolve(id ?? ""),
+      );
+    });
+    if (!streamId) {
+      await closeOffscreen(); // user cancelled the picker — tear the empty doc down
+      return;
+    }
+    chrome.runtime.sendMessage({ type: "OFFSCREEN_START", streamId } satisfies Message).catch(() => {});
+  } catch (err) {
+    await closeOffscreen();
+    const msg = err instanceof Error ? err.message : "Couldn't start recording.";
+    // eslint-disable-next-line no-console
+    console.error("[Recio] startRecording failed:", err);
+    chrome.tabs
+      .sendMessage(tab.id, { type: "SHOW_TOAST", title: "Recording failed", error: msg } satisfies Message)
+      .catch(() => {});
+  }
+}
+
+/** Surface a toast (and optional share link) on every tab. */
+async function broadcastToast(title: string, shareUrl?: string | null, error?: string): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab.id != null) {
+      chrome.tabs
+        .sendMessage(tab.id, { type: "SHOW_TOAST", title, shareUrl, error } satisfies Message)
+        .catch(() => {});
+    }
+  }
 }
 
 /** Push the current recording state to every tab's content script (on transitions). */
@@ -167,7 +234,11 @@ async function handleMessage(
 ): Promise<MessageResponse> {
   switch (message.type) {
     case "OPEN_STUDIO":
-      await openStudio();
+      await openStudio(message.mode);
+      return { ok: true };
+
+    case "START_RECORDING":
+      await startRecording();
       return { ok: true };
 
     case "CAPTURE_SCREENSHOT":
@@ -180,6 +251,9 @@ async function handleMessage(
       return { ok: true };
     case "CONNECT_DRIVE":
       await connectDrive();
+      return { ok: true };
+    case "CONNECT_DROPBOX":
+      await connectDropbox();
       return { ok: true };
 
     case "CAPTURE_REGION":
@@ -235,29 +309,41 @@ async function handleMessage(
       void broadcastRecordingState();
       return { ok: true };
 
-    case "STUDIO_PUBLISHED": {
-      // Surface the link on every tab — handy when the user stopped from the on-page bar.
-      const tabs = await chrome.tabs.query({});
-      for (const tab of tabs) {
-        if (tab.id != null) {
-          chrome.tabs
-            .sendMessage(tab.id, {
-              type: "SHOW_TOAST",
-              title: "Recording saved",
-              shareUrl: message.shareUrl,
-            } satisfies Message)
-            .catch(() => {});
-        }
+    case "STUDIO_PUBLISHED":
+      // Legacy studio-tab path; surface the link on every tab.
+      await broadcastToast("Recording saved", message.shareUrl);
+      return { ok: true };
+
+    // ── Offscreen recorder → SW ──
+    case "REQUEST_COUNTDOWN": {
+      // Show the 3-2-1 on whatever tab the user is looking at.
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id != null) {
+        chrome.tabs
+          .sendMessage(tab.id, { type: "SHOW_COUNTDOWN", seconds: message.seconds } satisfies Message)
+          .catch(() => {});
       }
       return { ok: true };
     }
+    case "RECORDING_PUBLISHED": {
+      await broadcastToast("Recording saved", message.shareUrl);
+      // No studio tab to navigate — open the Loom-style detail page ourselves.
+      await chrome.tabs.create({ url: `${config.webBaseUrl}/recordings/${message.mediaId}` });
+      await closeOffscreen();
+      return { ok: true };
+    }
+    case "RECORDING_FAILED":
+      await broadcastToast("Recording failed", null, message.error);
+      await closeOffscreen();
+      return { ok: true };
+
     case "GET_RECORDING_STATE":
       return {
         ok: true,
         recording: { active: recording.active, state: recording.state, elapsedMs: recording.elapsedMs },
       };
 
-    // ── Remote controls (from the on-page bar → studio) ──
+    // ── Remote controls (from the on-page bar → studio tab) ──
     case "RECORDING_CONTROL":
       if (recording.studioTabId != null) {
         chrome.tabs.sendMessage(recording.studioTabId, message).catch(() => {});

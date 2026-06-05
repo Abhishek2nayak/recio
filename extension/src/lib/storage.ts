@@ -1,5 +1,5 @@
 /**
- * Typed wrapper over `chrome.storage.local`. Holds the FlowCap session (access
+ * Typed wrapper over `chrome.storage.local`. Holds the Recio session (access
  * token + user), the chosen upload destination, and a small recents list. The
  * access token lives here (not a cookie) because the extension calls the API
  * cross-origin from a service worker.

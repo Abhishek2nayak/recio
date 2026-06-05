@@ -43,7 +43,7 @@ export function SharePanel({
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">Share</h3>
         <span className="font-mono text-[11px] text-muted">
-          {provider === StorageProvider.DRIVE ? "via Google Drive" : "via FlowCap"}
+          {provider === StorageProvider.DRIVE ? "via Google Drive" : "via Recio"}
         </span>
       </div>
 

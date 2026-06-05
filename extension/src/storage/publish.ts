@@ -17,6 +17,7 @@ import { api } from "../lib/api.js";
 import { addRecent, getSettings } from "../lib/storage.js";
 import { sendMessage, type UploadState } from "../lib/messages.js";
 import { uploadToDrive } from "./driveUploader.js";
+import { uploadToDropbox } from "./dropboxUploader.js";
 import { uploadToServer } from "./serverUploader.js";
 
 export interface PublishParams {
@@ -70,20 +71,13 @@ export async function publishCapture(params: PublishParams): Promise<PublishResu
     // 1. Upload the bytes straight to the destination.
     let storageFileId: string;
     if (destination === StorageProvider.DRIVE) {
-      const { sessionUri } = await api.initiateDriveUpload({
-        fileName,
-        mimeType,
-        sizeBytes: blob.size,
-        resourceType,
-      });
+      const { sessionUri } = await api.initiateDriveUpload({ fileName, mimeType, sizeBytes: blob.size, resourceType });
       ({ fileId: storageFileId } = await uploadToDrive({ sessionUri, blob, mimeType, onProgress: report }));
+    } else if (destination === StorageProvider.DROPBOX) {
+      const { accessToken, path } = await api.initiateDropboxUpload({ fileName, mimeType, sizeBytes: blob.size, resourceType });
+      ({ path: storageFileId } = await uploadToDropbox({ accessToken, path, blob, onProgress: report }));
     } else {
-      const { signedUrl, path } = await api.initiateServerUpload({
-        fileName,
-        mimeType,
-        sizeBytes: blob.size,
-        resourceType,
-      });
+      const { signedUrl, path } = await api.initiateServerUpload({ fileName, mimeType, sizeBytes: blob.size, resourceType });
       await uploadToServer({ signedUrl, blob, mimeType, onProgress: report });
       storageFileId = path;
     }

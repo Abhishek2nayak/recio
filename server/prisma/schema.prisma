@@ -52,6 +52,13 @@ model User {
   plan         Plan    @default(FREE) // denormalized entitlement; billing truth lives on Subscription
   stripeCustomerId String? @unique
 
+  // Pro "custom branding" — applied to this user's public share pages (gated by the
+  // customBranding entitlement at read/write time). null = default Recio branding.
+  brandName    String?
+  brandLogoUrl String?
+  ctaLabel     String?
+  ctaUrl       String?
+
   storageConnections StorageConnection[]
   recordings         Recording[]
   screenshots        Screenshot[]

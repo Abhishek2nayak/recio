@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { StorageProvider, formatBytes } from "@flowcap/shared";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { StorageProvider, formatBytes, type BrandingDTO } from "@flowcap/shared";
 import { ApiError, api, type StorageStatus } from "../lib/api.js";
-import { Button, Card, Skeleton, StorageBadge } from "../components/ui.js";
+import { useAuthStore } from "../stores/authStore.js";
+import { Button, Card, Input, Skeleton, StorageBadge } from "../components/ui.js";
 
 export function Settings() {
   const [status, setStatus] = useState<StorageStatus | null>(null);
@@ -227,7 +228,93 @@ export function Settings() {
           </div>
         </>
       )}
+
+      <BrandingSection />
     </div>
+  );
+}
+
+/** Pro custom-branding editor for share pages. Locked (with an upgrade nudge) on Free. */
+function BrandingSection() {
+  const user = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
+  const isPro = Boolean(user?.entitlements?.customBranding);
+  const [b, setB] = useState<BrandingDTO | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api
+      .getBranding()
+      .then(setB)
+      .catch(() => setB({ brandName: null, brandLogoUrl: null, ctaLabel: null, ctaUrl: null }));
+  }, []);
+
+  function field(key: keyof BrandingDTO, value: string) {
+    setB((p) => ({ ...(p as BrandingDTO), [key]: value.trim() || null }));
+    setSaved(false);
+  }
+  async function save() {
+    if (!b) return;
+    setSaving(true);
+    try {
+      setB(await api.updateBranding(b));
+      setSaved(true);
+    } catch {
+      /* surfaced by the global 402 modal if it's an entitlement issue */
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <h2 className="mt-8 flex items-center gap-2 text-sm font-medium text-muted">
+        Share page branding
+        <span className="rounded-full bg-highlight px-1.5 py-0.5 text-[10px] font-semibold text-[#0A0A0A]">PRO</span>
+      </h2>
+      <Card className="mt-3 p-4">
+        {!isPro && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-highlight/15 px-3 py-2 ring-1 ring-highlight/40">
+            <p className="text-xs text-text-primary">Add your logo and a call-to-action to share pages with Pro.</p>
+            <Button variant="highlight" size="sm" onClick={() => navigate("/pricing")}>
+              Upgrade
+            </Button>
+          </div>
+        )}
+        <fieldset disabled={!isPro || !b} className={!isPro ? "opacity-60" : ""}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Labeled label="Brand name">
+              <Input value={b?.brandName ?? ""} onChange={(e) => field("brandName", e.target.value)} placeholder="Acme Inc." />
+            </Labeled>
+            <Labeled label="Logo URL">
+              <Input value={b?.brandLogoUrl ?? ""} onChange={(e) => field("brandLogoUrl", e.target.value)} placeholder="https://…/logo.png" />
+            </Labeled>
+            <Labeled label="Call-to-action label">
+              <Input value={b?.ctaLabel ?? ""} onChange={(e) => field("ctaLabel", e.target.value)} placeholder="Book a call" />
+            </Labeled>
+            <Labeled label="Call-to-action link">
+              <Input value={b?.ctaUrl ?? ""} onChange={(e) => field("ctaUrl", e.target.value)} placeholder="https://cal.com/you" />
+            </Labeled>
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <Button variant="primary" size="sm" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : "Save branding"}
+            </Button>
+            {saved && <span className="text-xs text-success">Saved</span>}
+          </div>
+        </fieldset>
+      </Card>
+    </>
+  );
+}
+
+function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs text-muted">{label}</span>
+      {children}
+    </label>
   );
 }
 

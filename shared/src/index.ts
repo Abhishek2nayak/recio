@@ -22,6 +22,7 @@ export * from "./types/models.js";
 // schemas (Zod values + inferred types)
 export * from "./schemas/analytics.js";
 export * from "./schemas/auth.js";
+export * from "./schemas/branding.js";
 export * from "./schemas/comment.js";
 export * from "./schemas/media.js";
 export * from "./schemas/reaction.js";

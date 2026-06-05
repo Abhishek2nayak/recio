@@ -85,6 +85,14 @@ export interface ScreenshotDTO extends MediaBase {
 
 export type MediaDTO = RecordingDTO | ScreenshotDTO;
 
+/** Pro custom-branding for a user's public share pages; null fields = Recio default. */
+export interface BrandingDTO {
+  brandName: string | null;
+  brandLogoUrl: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+}
+
 /** Engagement analytics for one media item (owner-only). */
 export interface AnalyticsDTO {
   /** Total view sessions. */
@@ -129,6 +137,8 @@ export interface PublicShareViewDTO {
   trimEndSec: number | null;
   viewCount: number;
   ownerName: string | null;
+  /** Owner's custom branding, resolved only when their plan includes it; else null. */
+  branding: BrandingDTO | null;
   createdAt: ISODateString;
   permission: SharePermission;
 }

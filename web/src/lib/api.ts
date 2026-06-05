@@ -6,8 +6,10 @@
 import type {
   AnalyticsDTO,
   ApiResponse,
+  BrandingDTO,
   CreateShareInput,
   RecordViewInput,
+  UpdateBrandingInput,
   LinkVisibility,
   ListMediaQuery,
   CommentDTO,
@@ -173,4 +175,9 @@ export const api = {
   recordView: (body: RecordViewInput) =>
     request<{ recorded: boolean }>("/analytics/view", { method: "POST", body, auth: false }),
   getAnalytics: (id: string) => request<AnalyticsDTO>(`/analytics/${id}`),
+
+  // branding (Pro)
+  getBranding: () => request<BrandingDTO>("/branding"),
+  updateBranding: (body: UpdateBrandingInput) =>
+    request<BrandingDTO>("/branding", { method: "PATCH", body }),
 };

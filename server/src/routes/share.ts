@@ -10,6 +10,7 @@
  */
 import { Router } from "express";
 import {
+  can,
   ErrorCode,
   LinkVisibility,
   ResourceType,
@@ -107,8 +108,18 @@ shareRouter.get(
     const playbackUrl = await getPlaybackUrl(media.userId, media.storageProvider, media.storageFileId, media.id);
     const owner = await prisma.user.findUnique({
       where: { id: media.userId },
-      select: { name: true },
+      select: { name: true, plan: true, brandName: true, brandLogoUrl: true, ctaLabel: true, ctaUrl: true },
     });
+    // Only apply branding while the owner's plan still includes it.
+    const branding =
+      owner && can(owner.plan, "customBranding")
+        ? {
+            brandName: owner.brandName,
+            brandLogoUrl: owner.brandLogoUrl,
+            ctaLabel: owner.ctaLabel,
+            ctaUrl: owner.ctaUrl,
+          }
+        : null;
 
     const view: PublicShareViewDTO = {
       resourceType: type,
@@ -121,6 +132,7 @@ shareRouter.get(
       trimEndSec: type === ResourceType.RECORDING ? (media as Recording).trimEndSec : null,
       viewCount: media.viewCount + 1,
       ownerName: owner?.name ?? null,
+      branding,
       createdAt: media.createdAt.toISOString(),
       permission: share?.permission ?? SharePermission.VIEW,
     };

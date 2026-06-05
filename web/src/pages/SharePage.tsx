@@ -36,13 +36,32 @@ export function SharePage() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="flex items-center justify-between border-b border-border px-5 py-3">
-        <Link to="/" className="flex items-center gap-2 text-text-primary">
-          <Logo className="text-accent" />
-          <span className="text-sm font-semibold tracking-tight">Recio</span>
-        </Link>
-        <Link to={authed ? "/dashboard" : "/register"} className="text-xs text-accent hover:text-accent-hover">
-          {authed ? "Open dashboard →" : "Get Recio →"}
-        </Link>
+        {view?.branding && (view.branding.brandLogoUrl || view.branding.brandName) ? (
+          <span className="flex items-center gap-2 text-text-primary">
+            {view.branding.brandLogoUrl && (
+              <img src={view.branding.brandLogoUrl} alt="" className="h-7 max-w-[160px] object-contain" />
+            )}
+            {view.branding.brandName && (
+              <span className="text-sm font-semibold tracking-tight">{view.branding.brandName}</span>
+            )}
+          </span>
+        ) : (
+          <Link to="/" className="flex items-center gap-2 text-text-primary">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-highlight">
+              <Logo width={16} height={16} />
+            </span>
+            <span className="text-sm font-semibold tracking-tight">Recio</span>
+          </Link>
+        )}
+        {authed ? (
+          <Link to="/dashboard" className="text-xs text-accent hover:text-accent-hover">
+            Open dashboard →
+          </Link>
+        ) : view?.branding ? null : (
+          <Link to="/register" className="text-xs text-accent hover:text-accent-hover">
+            Get Recio →
+          </Link>
+        )}
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 py-10">
@@ -71,6 +90,17 @@ function ShareViewer({ view }: { view: PublicShareViewDTO }) {
           <img src={view.playbackUrl} alt={view.title} className="max-h-[72vh] w-full object-contain" />
         )}
       </div>
+
+      {view.branding?.ctaLabel && view.branding.ctaUrl && (
+        <a
+          href={view.branding.ctaUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-highlight px-4 py-3 text-sm font-semibold text-[#0A0A0A] shadow-sm transition-colors hover:bg-highlight-hover"
+        >
+          {view.branding.ctaLabel} →
+        </a>
+      )}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           {view.ownerName && (

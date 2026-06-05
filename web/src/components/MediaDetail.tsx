@@ -4,10 +4,11 @@
  * with the Share panel (server-side Drive permission toggle), a Transcript placeholder,
  * and delete. The page wrappers only handle fetching + the type-specific API calls.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Link, useNavigate } from "react-router-dom";
-import { ResourceType, formatBytes, formatDuration, type MediaDTO } from "@flowcap/shared";
+import { ResourceType, formatBytes, formatDuration, type AnalyticsDTO, type MediaDTO } from "@flowcap/shared";
+import { api } from "../lib/api.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { MediaPlayer } from "./MediaPlayer.js";
 import { SharePanel } from "./SharePanel.js";
@@ -112,6 +113,9 @@ export function MediaDetail({
             onChange={setIsPublic}
           />
 
+          <AnalyticsPanel mediaId={media.id} />
+
+
           {/* Transcript placeholder (Loom parity; AI transcript is a Phase-2 feature) */}
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -133,6 +137,75 @@ export function MediaDetail({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Engagement analytics for the owner: views, unique viewers, and (Pro) a retention curve. */
+function AnalyticsPanel({ mediaId }: { mediaId: string }) {
+  const navigate = useNavigate();
+  const [data, setData] = useState<AnalyticsDTO | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getAnalytics(mediaId).then((d) => !cancelled && setData(d)).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaId]);
+
+  // Histogram of max-reached buckets → a monotonic retention curve (≥ each point).
+  const retention = data?.pro
+    ? data.pro.dropOff.map((_, k) => data.pro!.dropOff.slice(k).reduce((s, n) => s + n, 0))
+    : [];
+  const denom = Math.max(1, data?.views ?? 1);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <h3 className="text-sm font-medium">Analytics</h3>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Stat label="Views" value={data ? data.views : "—"} />
+        <Stat label="Unique viewers" value={data ? data.uniqueViewers : "—"} />
+      </div>
+
+      {data?.pro ? (
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted">Avg watched</span>
+            <span className="font-medium text-text-primary">{data.pro.avgWatchedPct}%</span>
+          </div>
+          <p className="mb-1.5 mt-3 text-[11px] text-muted">Viewer retention</p>
+          <div className="flex h-20 items-end gap-1">
+            {retention.map((count, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-t bg-highlight"
+                style={{ height: `${Math.max(3, (count / denom) * 100)}%` }}
+                title={`${i * 10}%+ watched · ${count} ${count === 1 ? "viewer" : "viewers"}`}
+              />
+            ))}
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] text-muted">
+            <span>0%</span>
+            <span>100%</span>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => navigate("/pricing")}
+          className="mt-4 w-full rounded-lg bg-highlight/15 px-3 py-2 text-xs font-medium text-text-primary ring-1 ring-highlight/40 transition-colors hover:bg-highlight/25"
+        >
+          Unlock watch-through & retention with Pro →
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg bg-bg-primary px-3 py-2">
+      <p className="text-lg font-semibold tabular-nums">{value}</p>
+      <p className="text-[11px] text-muted">{label}</p>
     </div>
   );
 }

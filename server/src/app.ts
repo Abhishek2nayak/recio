@@ -20,6 +20,7 @@ import { screenshotsRouter } from "./routes/screenshots.js";
 import { shareRouter } from "./routes/share.js";
 import { reactionsRouter } from "./routes/reactions.js";
 import { commentsRouter } from "./routes/comments.js";
+import { analyticsRouter } from "./routes/analytics.js";
 
 export function createApp(): Express {
   const app = express();
@@ -59,6 +60,7 @@ export function createApp(): Express {
   app.use("/share", shareRouter);
   app.use("/reactions", reactionsRouter);
   app.use("/comments", commentsRouter);
+  app.use("/analytics", analyticsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

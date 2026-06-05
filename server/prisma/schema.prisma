@@ -212,6 +212,21 @@ model Reaction {
   @@index([resourceId])
 }
 
+// One row per view session (page-load) of a media item. `watchedPct` is the max
+// progress reached, updated as the viewer watches. Powers the engagement analytics
+// (total/unique views, avg watch-through, drop-off). Polymorphic resourceId (no FK).
+model ViewEvent {
+  id           String       @id @default(cuid())
+  resourceType ResourceType
+  resourceId   String
+  viewerId     String // anonymous, persisted in the viewer's localStorage
+  sessionId    String       @unique // one per page-load; the upsert key
+  watchedPct   Int          @default(0) // 0..100, max reached
+  createdAt    DateTime     @default(now())
+
+  @@index([resourceId, createdAt])
+}
+
 // Comments on a media item. Polymorphic resourceId; authorUserId is set when an
 // authenticated user posts, otherwise it's a guest with just a display name.
 model Comment {

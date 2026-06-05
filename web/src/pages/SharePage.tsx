@@ -1,8 +1,9 @@
 /** Public share viewer at /s/:token — no auth. Resolves the link and plays the media. */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ResourceType, formatDuration, type PublicShareViewDTO } from "@flowcap/shared";
 import { ApiError, api } from "../lib/api.js";
+import { useViewTracker } from "../hooks/useViewTracker.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { Reactions } from "../components/Reactions.js";
 import { Comments } from "../components/Comments.js";
@@ -56,12 +57,14 @@ export function SharePage() {
 
 function ShareViewer({ view }: { view: PublicShareViewDTO }) {
   const isRecording = view.resourceType === ResourceType.RECORDING;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  useViewTracker(view.resourceType, view.resourceId, videoRef);
 
   return (
     <div className="w-full max-w-4xl">
       <div className="overflow-hidden rounded-xl border border-border bg-black">
         {isRecording ? (
-          <video src={view.playbackUrl} controls autoPlay className="aspect-video w-full bg-black" />
+          <video ref={videoRef} src={view.playbackUrl} controls autoPlay className="aspect-video w-full bg-black" />
         ) : (
           <img src={view.playbackUrl} alt={view.title} className="max-h-[72vh] w-full object-contain" />
         )}

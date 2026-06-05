@@ -4,8 +4,10 @@
  * (refresh cookie travels via `credentials: "include"`).
  */
 import type {
+  AnalyticsDTO,
   ApiResponse,
   CreateShareInput,
+  RecordViewInput,
   LinkVisibility,
   ListMediaQuery,
   CommentDTO,
@@ -166,4 +168,9 @@ export const api = {
     request<{ comments: CommentDTO[] }>(`/comments/${resourceId}`, { auth: false }),
   addComment: (body: CreateCommentInput, authed: boolean) =>
     request<{ comment: CommentDTO }>("/comments", { method: "POST", body, auth: authed }),
+
+  // analytics
+  recordView: (body: RecordViewInput) =>
+    request<{ recorded: boolean }>("/analytics/view", { method: "POST", body, auth: false }),
+  getAnalytics: (id: string) => request<AnalyticsDTO>(`/analytics/${id}`),
 };

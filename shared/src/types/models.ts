@@ -82,6 +82,21 @@ export interface ScreenshotDTO extends MediaBase {
 
 export type MediaDTO = RecordingDTO | ScreenshotDTO;
 
+/** Engagement analytics for one media item (owner-only). */
+export interface AnalyticsDTO {
+  /** Total view sessions. */
+  views: number;
+  /** Distinct viewers (by anonymous viewerId). */
+  uniqueViewers: number;
+  /** Pro-gated deep stats. `null` when the owner's plan lacks `fullAnalytics`. */
+  pro: {
+    /** Mean watch-through across sessions, 0..100. */
+    avgWatchedPct: number;
+    /** Drop-off histogram: 10 buckets (0–10% … 90–100%), each a session count. */
+    dropOff: number[];
+  } | null;
+}
+
 export interface ShareDTO {
   id: string;
   resourceType: ResourceType;

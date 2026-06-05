@@ -20,6 +20,7 @@ export * from "./types/api.js";
 export * from "./types/models.js";
 
 // schemas (Zod values + inferred types)
+export * from "./schemas/analytics.js";
 export * from "./schemas/auth.js";
 export * from "./schemas/comment.js";
 export * from "./schemas/media.js";

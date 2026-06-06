@@ -39,6 +39,8 @@ export const updateMediaSchema = z
     // Non-destructive trim (seconds, recordings only). `null` clears that bound.
     trimStartSec: z.number().min(0).nullable().optional(),
     trimEndSec: z.number().min(0).nullable().optional(),
+    // Move into a team workspace's shared library; `null` moves back to personal.
+    workspaceId: z.string().nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "No fields to update." });
 export type UpdateMediaInput = z.infer<typeof updateMediaSchema>;
@@ -53,5 +55,7 @@ export const listMediaQuerySchema = z.object({
   filter: z.enum(mediaFilter).default("ALL"),
   sort: z.enum(mediaSort).default("NEWEST"),
   search: z.string().trim().max(200).optional(),
+  /** When set, list a workspace's shared library instead of the caller's personal media. */
+  workspaceId: z.string().optional(),
 });
 export type ListMediaQuery = z.infer<typeof listMediaQuerySchema>;

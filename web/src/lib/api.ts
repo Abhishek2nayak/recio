@@ -9,8 +9,11 @@ import type {
   BrandingDTO,
   CheckoutInput,
   CreateShareInput,
+  InviteDTO,
+  MemberDTO,
   RecordViewInput,
   UpdateBrandingInput,
+  WorkspaceDTO,
   LinkVisibility,
   ListMediaQuery,
   CommentDTO,
@@ -186,4 +189,21 @@ export const api = {
   startCheckout: (body: CheckoutInput) =>
     request<{ url: string }>("/billing/checkout", { method: "POST", body }),
   billingPortal: () => request<{ url: string }>("/billing/portal", { method: "POST" }),
+
+  // workspaces (Business)
+  listWorkspaces: () => request<{ workspaces: WorkspaceDTO[] }>("/workspaces"),
+  createWorkspace: (name: string) =>
+    request<{ workspace: WorkspaceDTO }>("/workspaces", { method: "POST", body: { name } }),
+  workspaceMembers: (id: string) => request<{ members: MemberDTO[] }>(`/workspaces/${id}/members`),
+  workspaceInvites: (id: string) => request<{ invites: InviteDTO[] }>(`/workspaces/${id}/invites`),
+  inviteMember: (id: string, email: string, role: "ADMIN" | "MEMBER") =>
+    request<{ invite: InviteDTO }>(`/workspaces/${id}/invites`, { method: "POST", body: { email, role } }),
+  revokeInvite: (id: string, inviteId: string) =>
+    request<{ revoked: boolean }>(`/workspaces/${id}/invites/${inviteId}`, { method: "DELETE" }),
+  setMemberRole: (id: string, userId: string, role: "ADMIN" | "MEMBER") =>
+    request<{ updated: boolean }>(`/workspaces/${id}/members/${userId}`, { method: "PATCH", body: { role } }),
+  removeMember: (id: string, userId: string) =>
+    request<{ removed: boolean }>(`/workspaces/${id}/members/${userId}`, { method: "DELETE" }),
+  acceptInvite: (token: string) =>
+    request<{ workspace: WorkspaceDTO }>(`/workspaces/invites/${token}/accept`, { method: "POST" }),
 };

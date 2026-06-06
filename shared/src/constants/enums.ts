@@ -25,6 +25,14 @@ export const Plan = {
 } as const;
 export type Plan = (typeof Plan)[keyof typeof Plan];
 
+/** A member's role within a team workspace. */
+export const WorkspaceRole = {
+  OWNER: "OWNER",
+  ADMIN: "ADMIN",
+  MEMBER: "MEMBER",
+} as const;
+export type WorkspaceRole = (typeof WorkspaceRole)[keyof typeof WorkspaceRole];
+
 /** The two kinds of media Recio manages. */
 export const ResourceType = {
   RECORDING: "RECORDING",

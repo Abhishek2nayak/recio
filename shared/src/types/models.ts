@@ -13,6 +13,7 @@ import type {
   SharePermission,
   StorageProvider,
   VideoMimeType,
+  WorkspaceRole,
 } from "../constants/enums.js";
 import type { Entitlements } from "../constants/entitlements.js";
 
@@ -59,6 +60,8 @@ interface MediaBase {
   /** A loadable media URL, set on list/detail responses so cards can render a real
    *  poster (recordings) or the image (screenshots) and a hover preview. */
   previewUrl?: string | null;
+  /** Team workspace this media lives in (shared library), or null for personal. */
+  workspaceId: string | null;
   shareToken: string;
   isPublic: boolean;
   visibility: LinkVisibility;
@@ -84,6 +87,35 @@ export interface ScreenshotDTO extends MediaBase {
 }
 
 export type MediaDTO = RecordingDTO | ScreenshotDTO;
+
+/** A team workspace the current user belongs to. */
+export interface WorkspaceDTO {
+  id: string;
+  name: string;
+  /** The current user's role in this workspace. */
+  role: WorkspaceRole;
+  memberCount: number;
+  createdAt: ISODateString;
+}
+
+/** A member of a workspace. */
+export interface MemberDTO {
+  userId: string;
+  name: string | null;
+  email: string;
+  role: WorkspaceRole;
+  joinedAt: ISODateString;
+}
+
+/** A pending invite (with its shareable accept link token). */
+export interface InviteDTO {
+  id: string;
+  email: string;
+  role: WorkspaceRole;
+  token: string;
+  expiresAt: ISODateString;
+  createdAt: ISODateString;
+}
 
 /** Pro custom-branding for a user's public share pages; null fields = Recio default. */
 export interface BrandingDTO {

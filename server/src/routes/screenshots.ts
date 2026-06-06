@@ -29,11 +29,13 @@ import { param } from "../lib/params.js";
 import { getPlaybackUrl } from "../services/storage-service.js";
 import {
   createScreenshot,
-  findOwnedScreenshot,
+  findViewableScreenshot,
   listScreenshots,
+  listWorkspaceScreenshots,
   softDeleteMedia,
   updateScreenshot,
 } from "../services/media-service.js";
+import { requireMember } from "../services/workspace-service.js";
 
 export const screenshotsRouter: Router = Router();
 
@@ -44,7 +46,13 @@ screenshotsRouter.get(
   validate(listMediaQuerySchema, "query"),
   asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListMediaQuery;
-    const page = await listScreenshots(getUserId(req), query);
+    let page;
+    if (query.workspaceId) {
+      await requireMember(getUserId(req), query.workspaceId);
+      page = await listWorkspaceScreenshots(query.workspaceId, query);
+    } else {
+      page = await listScreenshots(getUserId(req), query);
+    }
     const items = await Promise.all(
       page.items.map(async (s) => ({
         ...toScreenshotDTO(s),
@@ -68,7 +76,7 @@ screenshotsRouter.post(
 screenshotsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const screenshot = await findOwnedScreenshot(getUserId(req), param(req, "id"));
+    const screenshot = await findViewableScreenshot(getUserId(req), param(req, "id"));
     if (!screenshot) throw HttpError.notFound("Screenshot not found.");
     const playbackUrl = await getPlaybackUrl(
       screenshot.userId,

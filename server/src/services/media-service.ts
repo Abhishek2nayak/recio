@@ -15,6 +15,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/http-error.js";
 import { deleteStoredObject, setPublicAccess } from "./storage-service.js";
+import { requireMember } from "./workspace-service.js";
 
 type Order = Prisma.RecordingOrderByWithRelationInput[];
 
@@ -43,6 +44,18 @@ function whereFor(userId: string, query: ListMediaQuery) {
   const provider = providerFilter(query.filter);
   return {
     userId,
+    deletedAt: null,
+    workspaceId: null, // personal library excludes media moved into a team workspace
+    ...(provider ? { storageProvider: provider } : {}),
+    ...(query.search ? { title: { contains: query.search, mode: "insensitive" as const } } : {}),
+  };
+}
+
+/** Filter for a workspace's shared library (all members' media in that workspace). */
+function whereForWorkspace(workspaceId: string, query: ListMediaQuery) {
+  const provider = providerFilter(query.filter);
+  return {
+    workspaceId,
     deletedAt: null,
     ...(provider ? { storageProvider: provider } : {}),
     ...(query.search ? { title: { contains: query.search, mode: "insensitive" as const } } : {}),
@@ -87,6 +100,26 @@ export async function listScreenshots(userId: string, query: ListMediaQuery): Pr
   return paginate(rows, query.limit);
 }
 
+export async function listWorkspaceRecordings(workspaceId: string, query: ListMediaQuery): Promise<Page<Recording>> {
+  const rows = await prisma.recording.findMany({
+    where: whereForWorkspace(workspaceId, query),
+    orderBy: orderFor(query.sort),
+    take: query.limit + 1,
+    ...cursorArgs(query.cursor),
+  });
+  return paginate(rows, query.limit);
+}
+
+export async function listWorkspaceScreenshots(workspaceId: string, query: ListMediaQuery): Promise<Page<Screenshot>> {
+  const rows = await prisma.screenshot.findMany({
+    where: whereForWorkspace(workspaceId, query),
+    orderBy: orderFor(query.sort) as Prisma.ScreenshotOrderByWithRelationInput[],
+    take: query.limit + 1,
+    ...cursorArgs(query.cursor),
+  });
+  return paginate(rows, query.limit);
+}
+
 export function findOwnedRecording(userId: string, id: string): Promise<Recording | null> {
   return prisma.recording.findFirst({ where: { id, userId, deletedAt: null } });
 }
@@ -103,6 +136,34 @@ export async function findMediaByResource(
   return resourceType === ResourceType.RECORDING
     ? prisma.recording.findFirst({ where: { id: resourceId, deletedAt: null } })
     : prisma.screenshot.findFirst({ where: { id: resourceId, deletedAt: null } });
+}
+
+/** A recording the user can VIEW: their own, or one in a workspace they belong to. */
+export async function findViewableRecording(userId: string, id: string): Promise<Recording | null> {
+  const owned = await findOwnedRecording(userId, id);
+  if (owned) return owned;
+  const rec = await prisma.recording.findFirst({ where: { id, deletedAt: null } });
+  if (rec?.workspaceId) {
+    const m = await prisma.membership.findUnique({
+      where: { workspaceId_userId: { workspaceId: rec.workspaceId, userId } },
+    });
+    if (m) return rec;
+  }
+  return null;
+}
+
+/** A screenshot the user can VIEW: their own, or one in a workspace they belong to. */
+export async function findViewableScreenshot(userId: string, id: string): Promise<Screenshot | null> {
+  const owned = await findOwnedScreenshot(userId, id);
+  if (owned) return owned;
+  const shot = await prisma.screenshot.findFirst({ where: { id, deletedAt: null } });
+  if (shot?.workspaceId) {
+    const m = await prisma.membership.findUnique({
+      where: { workspaceId_userId: { workspaceId: shot.workspaceId, userId } },
+    });
+    if (m) return shot;
+  }
+  return null;
 }
 
 /** Fetch an owned media row (recording OR screenshot) by id — used by the stream proxy. */
@@ -201,6 +262,7 @@ export async function updateRecording(
   if (input.isPublic !== undefined && input.isPublic !== existing.isPublic) {
     await setPublicAccess(userId, existing.storageProvider, existing.storageFileId, input.isPublic);
   }
+  if (input.workspaceId) await requireMember(userId, input.workspaceId);
   return prisma.recording.update({
     where: { id },
     data: {
@@ -209,6 +271,7 @@ export async function updateRecording(
       ...(input.isPublic !== undefined ? { isPublic: input.isPublic } : {}),
       ...(input.trimStartSec !== undefined ? { trimStartSec: input.trimStartSec } : {}),
       ...(input.trimEndSec !== undefined ? { trimEndSec: input.trimEndSec } : {}),
+      ...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
     },
   });
 }
@@ -223,11 +286,13 @@ export async function updateScreenshot(
   if (input.isPublic !== undefined && input.isPublic !== existing.isPublic) {
     await setPublicAccess(userId, existing.storageProvider, existing.storageFileId, input.isPublic);
   }
+  if (input.workspaceId) await requireMember(userId, input.workspaceId);
   return prisma.screenshot.update({
     where: { id },
     data: {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.isPublic !== undefined ? { isPublic: input.isPublic } : {}),
+      ...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
     },
   });
 }

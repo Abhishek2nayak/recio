@@ -62,6 +62,12 @@ export const BoardIcon = (p: P) => (
     <path d="M7.5 12 10 9.5l2 2 3-3.5" />
   </svg>
 );
+export const TeamIcon = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="9" cy="8" r="3" />
+    <path d="M3 20a6 6 0 0 1 12 0M16 6.5a3 3 0 0 1 0 5.8M21 20a5.5 5.5 0 0 0-4-5.3" />
+  </svg>
+);
 export const GlobeIcon = (p: P) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="9" />

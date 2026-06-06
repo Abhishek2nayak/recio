@@ -3,11 +3,12 @@ import { clsx } from "clsx";
 import { NavLink, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useAuthStore } from "../stores/authStore.js";
-import { BoardIcon, LibraryIcon, Logo, SettingsIcon } from "./icons.js";
+import { BoardIcon, LibraryIcon, Logo, SettingsIcon, TeamIcon } from "./icons.js";
 
 const NAV = [
   { to: "/dashboard", label: "Library", Icon: LibraryIcon },
   { to: "/whiteboard", label: "Whiteboard", Icon: BoardIcon },
+  { to: "/team", label: "Team", Icon: TeamIcon },
   { to: "/settings", label: "Settings", Icon: SettingsIcon },
 ];
 

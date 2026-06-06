@@ -30,6 +30,7 @@ export * from "./schemas/reaction.js";
 export * from "./schemas/share.js";
 export * from "./schemas/storage.js";
 export * from "./schemas/upload.js";
+export * from "./schemas/workspace.js";
 
 // utils
 export * from "./utils/format.js";

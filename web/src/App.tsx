@@ -17,6 +17,8 @@ const ScreenshotView = lazy(() => import("./pages/ScreenshotView.js").then((m) =
 const Settings = lazy(() => import("./pages/Settings.js").then((m) => ({ default: m.Settings })));
 const SharePage = lazy(() => import("./pages/SharePage.js").then((m) => ({ default: m.SharePage })));
 const Pricing = lazy(() => import("./pages/Pricing.js").then((m) => ({ default: m.Pricing })));
+const Team = lazy(() => import("./pages/Team.js").then((m) => ({ default: m.Team })));
+const Invite = lazy(() => import("./pages/Invite.js").then((m) => ({ default: m.Invite })));
 
 type Status = "loading" | "authed" | "guest";
 
@@ -52,6 +54,7 @@ export function App() {
         />
         <Route path="/s/:token" element={<SharePage />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/invite/:token" element={<Invite />} />
         {/* Public, chrome-less canvas — embedded by the extension studio to record. */}
         <Route path="/whiteboard/embed" element={<Whiteboard />} />
 
@@ -59,6 +62,7 @@ export function App() {
         <Route element={<Protected status={status} />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/whiteboard" element={<Whiteboard />} />
+          <Route path="/team" element={<Team />} />
           <Route path="/recordings/:id" element={<RecordingView />} />
           <Route path="/screenshots/:id" element={<ScreenshotView />} />
           <Route path="/settings" element={<Settings />} />

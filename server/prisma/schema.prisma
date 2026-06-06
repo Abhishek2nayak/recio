@@ -32,6 +32,12 @@ enum StorageProvider {
   FLOWCAP
 }
 
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 enum ResourceType {
   RECORDING
   SCREENSHOT
@@ -157,6 +163,9 @@ model Recording {
   isPublic   Boolean @default(false)
   viewCount  Int     @default(0)
 
+  // When set, this lives in a workspace's shared team library (Business). null = personal.
+  workspaceId String?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   deletedAt DateTime?
@@ -165,6 +174,7 @@ model Recording {
 
   @@index([userId, createdAt, id])
   @@index([shareToken])
+  @@index([workspaceId, createdAt, id])
 }
 
 model Screenshot {
@@ -183,6 +193,9 @@ model Screenshot {
   isPublic   Boolean @default(false)
   viewCount  Int     @default(0)
 
+  // When set, this lives in a workspace's shared team library (Business). null = personal.
+  workspaceId String?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   deletedAt DateTime?
@@ -191,6 +204,7 @@ model Screenshot {
 
   @@index([userId, createdAt, id])
   @@index([shareToken])
+  @@index([workspaceId, createdAt, id])
 }
 
 model Share {
@@ -252,4 +266,54 @@ model Comment {
   createdAt    DateTime     @default(now())
 
   @@index([resourceId, createdAt])
+}
+
+// ── Team workspaces (Business) ────────────────────────────────────────────────
+// A shared space with members and a shared media library. `Membership.userId` /
+// `Invite` reference users loosely (no FK) to keep churn low; the workspace owns its
+// rows (cascade). Media gains an optional `workspaceId` to land in the team library.
+model Workspace {
+  id      String @id @default(cuid())
+  name    String
+  ownerId String
+
+  members Membership[]
+  invites Invite[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+model Membership {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Invite {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  email           String
+  role            WorkspaceRole @default(MEMBER)
+  token           String        @unique @default(cuid())
+  invitedByUserId String
+  acceptedAt      DateTime?
+  expiresAt       DateTime
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([email])
 }

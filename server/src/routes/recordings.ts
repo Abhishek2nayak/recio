@@ -29,11 +29,13 @@ import { param } from "../lib/params.js";
 import { getPlaybackUrl } from "../services/storage-service.js";
 import {
   createRecording,
-  findOwnedRecording,
+  findViewableRecording,
   listRecordings,
+  listWorkspaceRecordings,
   softDeleteMedia,
   updateRecording,
 } from "../services/media-service.js";
+import { requireMember } from "../services/workspace-service.js";
 
 export const recordingsRouter: Router = Router();
 
@@ -44,7 +46,13 @@ recordingsRouter.get(
   validate(listMediaQuerySchema, "query"),
   asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListMediaQuery;
-    const page = await listRecordings(getUserId(req), query);
+    let page;
+    if (query.workspaceId) {
+      await requireMember(getUserId(req), query.workspaceId); // 404s for non-members
+      page = await listWorkspaceRecordings(query.workspaceId, query);
+    } else {
+      page = await listRecordings(getUserId(req), query);
+    }
     const items = await Promise.all(
       page.items.map(async (r) => ({
         ...toRecordingDTO(r),
@@ -68,7 +76,7 @@ recordingsRouter.post(
 recordingsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const recording = await findOwnedRecording(getUserId(req), param(req, "id"));
+    const recording = await findViewableRecording(getUserId(req), param(req, "id"));
     if (!recording) throw HttpError.notFound("Recording not found.");
     const playbackUrl = await getPlaybackUrl(
       recording.userId,

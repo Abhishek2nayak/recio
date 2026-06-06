@@ -14,6 +14,7 @@ import {
   type AnalyticsDTO,
   type MediaDTO,
   type RecordingDTO,
+  type WorkspaceDTO,
 } from "@flowcap/shared";
 import { api } from "../lib/api.js";
 import { useTrimClamp } from "../hooks/useTrimClamp.js";
@@ -163,6 +164,8 @@ export function MediaDetail({
 
           <AnalyticsPanel mediaId={media.id} />
 
+          <MoveToWorkspace media={media} />
+
 
           {/* Transcript placeholder (Loom parity; AI transcript is a Phase-2 feature) */}
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -185,6 +188,54 @@ export function MediaDetail({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Move this media into a team workspace's shared library (or back to personal). */
+function MoveToWorkspace({ media }: { media: MediaDTO }) {
+  const [workspaces, setWorkspaces] = useState<WorkspaceDTO[] | null>(null);
+  const [current, setCurrent] = useState<string>(media.workspaceId ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api
+      .listWorkspaces()
+      .then((r) => setWorkspaces(r.workspaces))
+      .catch(() => setWorkspaces([]));
+  }, []);
+
+  if (!workspaces || workspaces.length === 0) return null;
+
+  async function move(value: string) {
+    setCurrent(value);
+    setSaving(true);
+    const body = { workspaceId: value || null };
+    try {
+      if (media.resourceType === ResourceType.RECORDING) await api.updateRecording(media.id, body);
+      else await api.updateScreenshot(media.id, body);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <h3 className="text-sm font-medium">Workspace</h3>
+      <p className="mt-1 text-xs text-muted">Share this in a team's library.</p>
+      <select
+        value={current}
+        disabled={saving}
+        onChange={(e) => void move(e.target.value)}
+        className="mt-2 w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+      >
+        <option value="">Personal (only you)</option>
+        {workspaces.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

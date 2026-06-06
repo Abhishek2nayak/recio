@@ -38,6 +38,12 @@ enum WorkspaceRole {
   MEMBER
 }
 
+enum TranscriptStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
 enum ResourceType {
   RECORDING
   SCREENSHOT
@@ -316,4 +322,22 @@ model Invite {
 
   @@index([workspaceId])
   @@index([email])
+}
+
+// AI transcript + summary for a recording (one-to-one). Generated on demand via the
+// ASR/LLM providers; inert until those keys are configured. text is searchable.
+model Transcript {
+  id          String           @id @default(cuid())
+  recordingId String           @unique
+  status      TranscriptStatus @default(PROCESSING)
+  language    String?
+  title       String? // AI-suggested title
+  summary     String? // AI summary
+  text        String? // full transcript
+  error       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([recordingId])
 }

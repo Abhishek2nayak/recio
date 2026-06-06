@@ -43,6 +43,11 @@ const envSchema = z.object({
 
   SIGNED_URL_TTL: z.coerce.number().int().positive().default(3600),
 
+  // AI suite — optional. Transcription is inert until DEEPGRAM_API_KEY is set;
+  // ANTHROPIC_API_KEY additionally enables AI title + summary.
+  DEEPGRAM_API_KEY: z.string().default(""),
+  ANTHROPIC_API_KEY: z.string().default(""),
+
   // TESTING ONLY: when "true", every account gets full (Business) entitlements so
   // Pro/Business features can be exercised without paying. Turn OFF for production.
   UNLOCK_ALL_FEATURES: z

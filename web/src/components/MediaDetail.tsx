@@ -14,9 +14,10 @@ import {
   type AnalyticsDTO,
   type MediaDTO,
   type RecordingDTO,
+  type TranscriptDTO,
   type WorkspaceDTO,
 } from "@flowcap/shared";
-import { api } from "../lib/api.js";
+import { ApiError, api } from "../lib/api.js";
 import { useTrimClamp } from "../hooks/useTrimClamp.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { MediaPlayer } from "./MediaPlayer.js";
@@ -167,18 +168,7 @@ export function MediaDetail({
           <MoveToWorkspace media={media} />
 
 
-          {/* Transcript placeholder (Loom parity; AI transcript is a Phase-2 feature) */}
-          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">Transcript</h3>
-              <span className="rounded-full bg-bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted">
-                soon
-              </span>
-            </div>
-            <p className="mt-1.5 text-xs text-muted">
-              Automatic transcripts and AI summaries are coming to Recio recordings.
-            </p>
-          </div>
+          {isRecording && <TranscriptPanel recordingId={media.id} />}
 
           <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
             <span className="flex items-center gap-2 text-xs text-muted">
@@ -189,6 +179,95 @@ export function MediaDetail({
         </div>
       </div>
     </div>
+  );
+}
+
+/** AI transcript + summary: shows the result, or a Generate button (Pro-metered). */
+function TranscriptPanel({ recordingId }: { recordingId: string }) {
+  const [t, setT] = useState<TranscriptDTO | null | "loading">("loading");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    api
+      .getTranscript(recordingId)
+      .then((r) => setT(r.transcript))
+      .catch(() => setT(null));
+  }, [recordingId]);
+
+  async function generate() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await api.generateTranscript(recordingId);
+      setT(r.transcript);
+    } catch (err) {
+      // 402 (over minutes) is handled by the global upsell modal; surface other errors.
+      setNote(err instanceof ApiError && err.code !== "UPGRADE_REQUIRED" ? err.message : null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const ready = t && t !== "loading" && t.status === "READY";
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-sm font-medium">
+          <SparkleIcon /> AI transcript
+        </h3>
+        {ready && (t as TranscriptDTO).language && (
+          <span className="rounded-full bg-bg-primary px-2 py-0.5 font-mono text-[10px] uppercase text-muted ring-1 ring-border">
+            {(t as TranscriptDTO).language}
+          </span>
+        )}
+      </div>
+
+      {t === "loading" ? (
+        <p className="mt-2 text-xs text-muted">Loading…</p>
+      ) : ready ? (
+        <div className="mt-2">
+          {(t as TranscriptDTO).summary && (
+            <p className="rounded-lg bg-bg-primary p-2.5 text-xs leading-relaxed text-text-primary">
+              {(t as TranscriptDTO).summary}
+            </p>
+          )}
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="mt-2 text-xs font-medium text-accent hover:text-accent-hover"
+          >
+            {open ? "Hide transcript" : "Show full transcript"}
+          </button>
+          {open && (
+            <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-muted">
+              {(t as TranscriptDTO).text || "(no speech detected)"}
+            </p>
+          )}
+        </div>
+      ) : t && (t as TranscriptDTO).status === "PROCESSING" ? (
+        <p className="mt-2 text-xs text-muted">Transcribing… refresh in a moment.</p>
+      ) : (
+        <div className="mt-2">
+          <p className="text-xs text-muted">
+            Generate a searchable transcript, AI title, and summary for this recording.
+          </p>
+          <Button variant="highlight" size="sm" className="mt-2.5" onClick={generate} disabled={busy}>
+            {busy ? "Generating…" : "Generate transcript"}
+          </Button>
+          {note && <p className="mt-2 text-xs text-muted">{note}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SparkleIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent">
+      <path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z" />
+    </svg>
   );
 }
 

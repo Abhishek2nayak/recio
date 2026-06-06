@@ -29,6 +29,7 @@ import { param } from "../lib/params.js";
 import { getPlaybackUrl } from "../services/storage-service.js";
 import {
   createRecording,
+  findOwnedRecording,
   findViewableRecording,
   listRecordings,
   listWorkspaceRecordings,
@@ -36,6 +37,7 @@ import {
   updateRecording,
 } from "../services/media-service.js";
 import { requireMember } from "../services/workspace-service.js";
+import { generateTranscript, getTranscript } from "../services/ai-service.js";
 
 export const recordingsRouter: Router = Router();
 
@@ -85,6 +87,26 @@ recordingsRouter.get(
       recording.id,
     );
     res.json(ok({ recording: toRecordingDTO(recording), playbackUrl }));
+  }),
+);
+
+// ── AI transcript ──
+recordingsRouter.get(
+  "/:id/transcript",
+  asyncHandler(async (req, res) => {
+    const recording = await findViewableRecording(getUserId(req), param(req, "id"));
+    if (!recording) throw HttpError.notFound("Recording not found.");
+    res.json(ok({ transcript: await getTranscript(recording.id) }));
+  }),
+);
+
+recordingsRouter.post(
+  "/:id/transcript",
+  asyncHandler(async (req, res) => {
+    const recording = await findOwnedRecording(getUserId(req), param(req, "id"));
+    if (!recording) throw HttpError.notFound("Recording not found.");
+    const transcript = await generateTranscript(getUserId(req), recording);
+    res.json(ok({ transcript }));
   }),
 );
 

@@ -25,6 +25,25 @@ export async function addProxyBytes(userId: string, bytes: number): Promise<void
   });
 }
 
+/** Add transcription minutes to the owner's monthly AI meter; returns the new total. */
+export async function addAiMinutes(userId: string, minutes: number): Promise<number> {
+  const periodStart = currentPeriodStart();
+  const row = await prisma.usageCounter.upsert({
+    where: { userId_periodStart: { userId, periodStart } },
+    create: { userId, periodStart, aiMinutes: minutes },
+    update: { aiMinutes: { increment: minutes } },
+  });
+  return row.aiMinutes;
+}
+
+/** Transcription minutes used this period. */
+export async function getAiMinutes(userId: string): Promise<number> {
+  const row = await prisma.usageCounter.findUnique({
+    where: { userId_periodStart: { userId, periodStart: currentPeriodStart() } },
+  });
+  return row?.aiMinutes ?? 0;
+}
+
 export interface StreamUsage {
   /** Bytes streamed this period. */
   used: number;

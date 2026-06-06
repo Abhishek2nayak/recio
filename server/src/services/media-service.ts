@@ -81,8 +81,28 @@ function cursorArgs(cursor?: string): { cursor?: { id: string }; skip?: number }
 }
 
 export async function listRecordings(userId: string, query: ListMediaQuery): Promise<Page<Recording>> {
+  let where: Prisma.RecordingWhereInput = whereFor(userId, query);
+  if (query.search) {
+    // Search spans titles AND transcript text (AI search across the library).
+    const matches = await prisma.transcript.findMany({
+      where: { text: { contains: query.search, mode: "insensitive" } },
+      select: { recordingId: true },
+    });
+    const ids = matches.map((t) => t.recordingId);
+    const provider = providerFilter(query.filter);
+    where = {
+      userId,
+      deletedAt: null,
+      workspaceId: null,
+      ...(provider ? { storageProvider: provider } : {}),
+      OR: [
+        { title: { contains: query.search, mode: "insensitive" } },
+        ...(ids.length ? [{ id: { in: ids } }] : []),
+      ],
+    };
+  }
   const rows = await prisma.recording.findMany({
-    where: whereFor(userId, query),
+    where,
     orderBy: orderFor(query.sort),
     take: query.limit + 1,
     ...cursorArgs(query.cursor),

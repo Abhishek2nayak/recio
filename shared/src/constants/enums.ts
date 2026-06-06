@@ -25,6 +25,14 @@ export const Plan = {
 } as const;
 export type Plan = (typeof Plan)[keyof typeof Plan];
 
+/** Lifecycle of an AI transcript job. */
+export const TranscriptStatus = {
+  PROCESSING: "PROCESSING",
+  READY: "READY",
+  FAILED: "FAILED",
+} as const;
+export type TranscriptStatus = (typeof TranscriptStatus)[keyof typeof TranscriptStatus];
+
 /** A member's role within a team workspace. */
 export const WorkspaceRole = {
   OWNER: "OWNER",

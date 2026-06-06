@@ -12,6 +12,7 @@ import type {
   ResourceType,
   SharePermission,
   StorageProvider,
+  TranscriptStatus,
   VideoMimeType,
   WorkspaceRole,
 } from "../constants/enums.js";
@@ -130,6 +131,16 @@ export interface BrandingDTO {
   brandLogoUrl: string | null;
   ctaLabel: string | null;
   ctaUrl: string | null;
+}
+
+/** AI transcript + summary for a recording. `null` from the API = not generated yet. */
+export interface TranscriptDTO {
+  status: TranscriptStatus;
+  language: string | null;
+  title: string | null;
+  summary: string | null;
+  text: string | null;
+  error: string | null;
 }
 
 /** Engagement analytics for one media item (owner-only). */

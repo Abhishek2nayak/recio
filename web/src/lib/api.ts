@@ -13,6 +13,7 @@ import type {
   MemberDTO,
   RecordViewInput,
   StreamUsageDTO,
+  TranscriptDTO,
   UpdateBrandingInput,
   WorkspaceDTO,
   LinkVisibility,
@@ -193,6 +194,12 @@ export const api = {
 
   // usage
   getUsage: () => request<StreamUsageDTO>("/usage"),
+
+  // AI transcript
+  getTranscript: (id: string) =>
+    request<{ transcript: TranscriptDTO | null }>(`/recordings/${id}/transcript`),
+  generateTranscript: (id: string) =>
+    request<{ transcript: TranscriptDTO }>(`/recordings/${id}/transcript`, { method: "POST" }),
 
   // workspaces (Business)
   listWorkspaces: () => request<{ workspaces: WorkspaceDTO[] }>("/workspaces"),

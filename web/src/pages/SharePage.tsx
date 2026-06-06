@@ -5,6 +5,7 @@ import { ResourceType, formatDuration, type PublicShareViewDTO } from "@flowcap/
 import { ApiError, api } from "../lib/api.js";
 import { useViewTracker } from "../hooks/useViewTracker.js";
 import { useTrimClamp } from "../hooks/useTrimClamp.js";
+import { useSkipSegments } from "../hooks/useSkipSegments.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { Reactions } from "../components/Reactions.js";
 import { Comments } from "../components/Comments.js";
@@ -80,6 +81,7 @@ function ShareViewer({ view }: { view: PublicShareViewDTO }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   useViewTracker(view.resourceType, view.resourceId, videoRef);
   useTrimClamp(videoRef, view.trimStartSec, view.trimEndSec);
+  useSkipSegments(videoRef, view.cuts);
 
   return (
     <div className="w-full max-w-4xl">

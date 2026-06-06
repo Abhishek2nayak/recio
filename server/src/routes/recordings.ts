@@ -38,6 +38,7 @@ import {
 } from "../services/media-service.js";
 import { requireMember } from "../services/workspace-service.js";
 import { generateTranscript, getTranscript } from "../services/ai-service.js";
+import { clearCleanup, computeCleanup } from "../services/cleanup-service.js";
 
 export const recordingsRouter: Router = Router();
 
@@ -107,6 +108,26 @@ recordingsRouter.post(
     if (!recording) throw HttpError.notFound("Recording not found.");
     const transcript = await generateTranscript(getUserId(req), recording);
     res.json(ok({ transcript }));
+  }),
+);
+
+// ── Smart cleanup (remove filler words + silences, non-destructively) ──
+recordingsRouter.post(
+  "/:id/cleanup",
+  asyncHandler(async (req, res) => {
+    const recording = await findOwnedRecording(getUserId(req), param(req, "id"));
+    if (!recording) throw HttpError.notFound("Recording not found.");
+    res.json(ok({ cleanup: await computeCleanup(recording.id) }));
+  }),
+);
+
+recordingsRouter.delete(
+  "/:id/cleanup",
+  asyncHandler(async (req, res) => {
+    const recording = await findOwnedRecording(getUserId(req), param(req, "id"));
+    if (!recording) throw HttpError.notFound("Recording not found.");
+    await clearCleanup(recording.id);
+    res.json(ok({ cleared: true }));
   }),
 );
 

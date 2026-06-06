@@ -80,6 +80,8 @@ export interface RecordingDTO extends MediaBase {
   /** Non-destructive trim bounds (seconds); null = no trim. Players clamp to these. */
   trimStartSec: number | null;
   trimEndSec: number | null;
+  /** Smart-cleanup skip ranges; null/[] = none. Players jump over these. */
+  cuts: CutSegment[] | null;
 }
 
 export interface ScreenshotDTO extends MediaBase {
@@ -131,6 +133,21 @@ export interface BrandingDTO {
   brandLogoUrl: string | null;
   ctaLabel: string | null;
   ctaUrl: string | null;
+}
+
+/** A playback range to skip (smart cleanup), in seconds. */
+export interface CutSegment {
+  start: number;
+  end: number;
+}
+
+/** Result of running smart cleanup on a recording. */
+export interface CleanupResultDTO {
+  cuts: CutSegment[];
+  removedFiller: number;
+  removedSilences: number;
+  /** Seconds removed from playback. */
+  savedSec: number;
 }
 
 /** AI transcript + summary for a recording. `null` from the API = not generated yet. */
@@ -185,6 +202,8 @@ export interface PublicShareViewDTO {
   /** Non-destructive trim bounds (seconds, recordings); null = none. */
   trimStartSec: number | null;
   trimEndSec: number | null;
+  /** Smart-cleanup skip ranges; null/[] = none. */
+  cuts: CutSegment[] | null;
   viewCount: number;
   ownerName: string | null;
   /** Owner's custom branding, resolved only when their plan includes it; else null. */

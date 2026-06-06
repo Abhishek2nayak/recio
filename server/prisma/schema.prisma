@@ -161,6 +161,10 @@ model Recording {
   trimStartSec Float?
   trimEndSec   Float?
 
+  // Non-destructive "smart cleanup": [{start,end}] ranges players skip over (filler
+  // words / silences). The file is untouched. null = no cleanup applied.
+  cuts Json?
+
   storageProvider StorageProvider
   storageFileId   String // Drive file ID or FlowCap S3 object key
   thumbnailUrl    String?
@@ -334,6 +338,7 @@ model Transcript {
   title       String? // AI-suggested title
   summary     String? // AI summary
   text        String? // full transcript
+  words       Json? // [{ word, start, end }] — powers smart cleanup
   error       String?
 
   createdAt DateTime @default(now())

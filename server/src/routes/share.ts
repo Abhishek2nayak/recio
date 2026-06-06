@@ -130,6 +130,10 @@ shareRouter.get(
       duration: type === ResourceType.RECORDING ? (media as Recording).duration : null,
       trimStartSec: type === ResourceType.RECORDING ? (media as Recording).trimStartSec : null,
       trimEndSec: type === ResourceType.RECORDING ? (media as Recording).trimEndSec : null,
+      cuts:
+        type === ResourceType.RECORDING
+          ? ((media as Recording).cuts as unknown as PublicShareViewDTO["cuts"]) ?? null
+          : null,
       viewCount: media.viewCount + 1,
       ownerName: owner?.name ?? null,
       branding,

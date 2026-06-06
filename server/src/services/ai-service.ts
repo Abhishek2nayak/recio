@@ -6,7 +6,7 @@
  * Gated + metered: each generation consumes ceil(duration/60) AI minutes against the
  * owner's monthly allowance (entitlements.aiMinutesIncluded).
  */
-import type { Recording } from "@prisma/client";
+import type { Prisma, Recording } from "@prisma/client";
 import { ErrorCode, type TranscriptDTO } from "@flowcap/shared";
 import { env } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
@@ -42,8 +42,16 @@ export async function getTranscript(recordingId: string): Promise<TranscriptDTO 
   return t ? toDTO(t) : null;
 }
 
-/** ASR via Deepgram (it fetches the remote URL itself). */
-async function transcribe(audioUrl: string): Promise<{ text: string; language: string | null }> {
+export interface TranscriptWord {
+  word: string;
+  start: number;
+  end: number;
+}
+
+/** ASR via Deepgram (it fetches the remote URL itself). Captures word timestamps. */
+async function transcribe(
+  audioUrl: string,
+): Promise<{ text: string; language: string | null; words: TranscriptWord[] }> {
   const res = await fetch(
     "https://api.deepgram.com/v1/listen?smart_format=true&punctuate=true&detect_language=true",
     {
@@ -54,12 +62,18 @@ async function transcribe(audioUrl: string): Promise<{ text: string; language: s
   );
   if (!res.ok) throw new Error(`Transcription failed (${res.status}).`);
   const json = (await res.json()) as {
-    results?: { channels?: { detected_language?: string; alternatives?: { transcript?: string }[] }[] };
+    results?: {
+      channels?: {
+        detected_language?: string;
+        alternatives?: { transcript?: string; words?: { word: string; start: number; end: number }[] }[];
+      }[];
+    };
   };
-  const channel = json.results?.channels?.[0];
+  const alt = json.results?.channels?.[0]?.alternatives?.[0];
   return {
-    text: channel?.alternatives?.[0]?.transcript ?? "",
-    language: channel?.detected_language ?? null,
+    text: alt?.transcript ?? "",
+    language: json.results?.channels?.[0]?.detected_language ?? null,
+    words: (alt?.words ?? []).map((w) => ({ word: w.word, start: w.start, end: w.end })),
   };
 }
 
@@ -133,12 +147,20 @@ export async function generateTranscript(userId: string, recording: Recording): 
       recording.storageFileId,
       recording.id,
     );
-    const { text, language } = await transcribe(audioUrl);
+    const { text, language, words } = await transcribe(audioUrl);
     const { title, summary } = await summarize(text);
 
     const saved = await prisma.transcript.update({
       where: { recordingId: recording.id },
-      data: { status: "READY", text, language, title, summary, error: null },
+      data: {
+        status: "READY",
+        text,
+        language,
+        title,
+        summary,
+        words: words as unknown as Prisma.InputJsonValue,
+        error: null,
+      },
     });
     await addAiMinutes(userId, minutes);
     return toDTO(saved);

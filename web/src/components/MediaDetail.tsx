@@ -12,6 +12,8 @@ import {
   formatBytes,
   formatDuration,
   type AnalyticsDTO,
+  type CleanupResultDTO,
+  type CutSegment,
   type MediaDTO,
   type RecordingDTO,
   type TranscriptDTO,
@@ -19,6 +21,7 @@ import {
 } from "@flowcap/shared";
 import { ApiError, api } from "../lib/api.js";
 import { useTrimClamp } from "../hooks/useTrimClamp.js";
+import { useSkipSegments } from "../hooks/useSkipSegments.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { MediaPlayer } from "./MediaPlayer.js";
 import { SharePanel } from "./SharePanel.js";
@@ -55,6 +58,10 @@ export function MediaDetail({
     end: rec?.trimEndSec ?? null,
   });
   useTrimClamp(videoRef, savedTrim.start, savedTrim.end, !editingTrim);
+
+  // Smart cleanup: skip filler/silence cut ranges (disabled while editing the trim).
+  const [cuts, setCuts] = useState<CutSegment[] | null>(rec?.cuts ?? null);
+  useSkipSegments(videoRef, cuts, !editingTrim);
 
   async function saveTrim(start: number | null, end: number | null) {
     await api.updateRecording(media.id, { trimStartSec: start, trimEndSec: end });
@@ -170,6 +177,8 @@ export function MediaDetail({
 
           {isRecording && <TranscriptPanel recordingId={media.id} />}
 
+          {isRecording && <CleanupPanel recordingId={media.id} cuts={cuts} onChange={setCuts} />}
+
           <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
             <span className="flex items-center gap-2 text-xs text-muted">
               Stored in <StorageBadge provider={media.storageProvider} />
@@ -255,6 +264,74 @@ function TranscriptPanel({ recordingId }: { recordingId: string }) {
           </p>
           <Button variant="highlight" size="sm" className="mt-2.5" onClick={generate} disabled={busy}>
             {busy ? "Generating…" : "Generate transcript"}
+          </Button>
+          {note && <p className="mt-2 text-xs text-muted">{note}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Smart cleanup: one click to skip filler words + silences (non-destructive). */
+function CleanupPanel({
+  recordingId,
+  cuts,
+  onChange,
+}: {
+  recordingId: string;
+  cuts: CutSegment[] | null;
+  onChange: (cuts: CutSegment[] | null) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [stats, setStats] = useState<CleanupResultDTO | null>(null);
+  const active = Boolean(cuts && cuts.length > 0);
+
+  async function run() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const { cleanup } = await api.runCleanup(recordingId);
+      onChange(cleanup.cuts);
+      setStats(cleanup);
+      if (cleanup.cuts.length === 0) setNote("Nothing to trim — no filler or long silences found.");
+    } catch (err) {
+      setNote(err instanceof ApiError && err.code !== "UPGRADE_REQUIRED" ? err.message : null);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function reset() {
+    setBusy(true);
+    try {
+      await api.clearCleanup(recordingId);
+      onChange(null);
+      setStats(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <h3 className="flex items-center gap-1.5 text-sm font-medium">
+        <SparkleIcon /> Smart cleanup
+      </h3>
+      {active ? (
+        <div className="mt-1.5">
+          <p className="text-xs text-text-primary">
+            Skipping {cuts!.length} dead spot{cuts!.length === 1 ? "" : "s"}
+            {stats ? ` · ~${stats.savedSec}s shorter` : ""}.
+          </p>
+          <button onClick={reset} disabled={busy} className="mt-2 text-xs text-muted hover:text-danger">
+            Reset
+          </button>
+        </div>
+      ) : (
+        <div className="mt-1">
+          <p className="text-xs text-muted">Auto‑remove filler words and long silences (uses the transcript).</p>
+          <Button variant="highlight" size="sm" className="mt-2.5" onClick={run} disabled={busy}>
+            {busy ? "Cleaning…" : "Remove filler & silences"}
           </Button>
           {note && <p className="mt-2 text-xs text-muted">{note}</p>}
         </div>

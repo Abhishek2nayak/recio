@@ -54,6 +54,7 @@ export function toRecordingDTO(r: Recording): RecordingDTO {
     workspaceId: r.workspaceId,
     trimStartSec: r.trimStartSec,
     trimEndSec: r.trimEndSec,
+    cuts: (r.cuts as unknown as RecordingDTO["cuts"]) ?? null,
     shareToken: r.shareToken,
     isPublic: r.isPublic,
     visibility: r.isPublic ? LinkVisibility.PUBLIC : LinkVisibility.PRIVATE,

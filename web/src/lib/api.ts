@@ -8,6 +8,7 @@ import type {
   ApiResponse,
   BrandingDTO,
   CheckoutInput,
+  CleanupResultDTO,
   CreateShareInput,
   InviteDTO,
   MemberDTO,
@@ -200,6 +201,12 @@ export const api = {
     request<{ transcript: TranscriptDTO | null }>(`/recordings/${id}/transcript`),
   generateTranscript: (id: string) =>
     request<{ transcript: TranscriptDTO }>(`/recordings/${id}/transcript`, { method: "POST" }),
+
+  // smart cleanup
+  runCleanup: (id: string) =>
+    request<{ cleanup: CleanupResultDTO }>(`/recordings/${id}/cleanup`, { method: "POST" }),
+  clearCleanup: (id: string) =>
+    request<{ cleared: boolean }>(`/recordings/${id}/cleanup`, { method: "DELETE" }),
 
   // workspaces (Business)
   listWorkspaces: () => request<{ workspaces: WorkspaceDTO[] }>("/workspaces"),

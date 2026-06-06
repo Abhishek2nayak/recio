@@ -42,6 +42,15 @@ const envSchema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().default("flowcap-media"),
 
   SIGNED_URL_TTL: z.coerce.number().int().positive().default(3600),
+
+  // Stripe billing — optional. The /billing endpoints stay inert (return "not enabled")
+  // until STRIPE_SECRET_KEY is set, so the app boots and builds without an account.
+  STRIPE_SECRET_KEY: z.string().default(""),
+  STRIPE_WEBHOOK_SECRET: z.string().default(""),
+  STRIPE_PRICE_PRO_MONTHLY: z.string().default(""),
+  STRIPE_PRICE_PRO_ANNUAL: z.string().default(""),
+  STRIPE_PRICE_BUSINESS_MONTHLY: z.string().default(""),
+  STRIPE_PRICE_BUSINESS_ANNUAL: z.string().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -22,6 +22,7 @@ import { reactionsRouter } from "./routes/reactions.js";
 import { commentsRouter } from "./routes/comments.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { brandingRouter } from "./routes/branding.js";
+import { billingRouter, billingWebhookHandler } from "./routes/billing.js";
 
 export function createApp(): Express {
   const app = express();
@@ -33,6 +34,10 @@ export function createApp(): Express {
       credentials: true, // allow the refresh cookie
     }),
   );
+  // Stripe webhook MUST see the raw body for signature verification — mount it
+  // before the JSON parser. (It no-ops with 503 until billing is configured.)
+  app.post("/billing/webhook", express.raw({ type: "application/json" }), billingWebhookHandler);
+
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
 
@@ -63,6 +68,7 @@ export function createApp(): Express {
   app.use("/comments", commentsRouter);
   app.use("/analytics", analyticsRouter);
   app.use("/branding", brandingRouter);
+  app.use("/billing", billingRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

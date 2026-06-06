@@ -8,9 +8,10 @@
  */
 import { useState } from "react";
 import { clsx } from "clsx";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Plan } from "@flowcap/shared";
 import { useAuthStore } from "../stores/authStore.js";
+import { ApiError, api } from "../lib/api.js";
 import { Button } from "../components/ui.js";
 import { CheckIcon, Logo } from "../components/icons.js";
 
@@ -81,8 +82,33 @@ const TIERS: Tier[] = [
 
 export function Pricing() {
   const user = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
   const [annual, setAnnual] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function upgrade(plan: Plan) {
+    if (!user) {
+      navigate("/register");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { url } = await api.startCheckout({
+        plan: plan as "PRO" | "BUSINESS",
+        interval: annual ? "annual" : "monthly",
+      });
+      window.location.href = url; // hosted Stripe Checkout
+    } catch (err) {
+      // Billing not configured yet (or any failure) → graceful notice.
+      setNotice(
+        err instanceof ApiError && err.code !== "INTERNAL_ERROR"
+          ? err.message
+          : "Payments aren't switched on yet — they're coming very soon.",
+      );
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
@@ -177,13 +203,8 @@ export function Pricing() {
                   <Button
                     variant={tier.highlighted ? "highlight" : "primary"}
                     className="w-full"
-                    onClick={() =>
-                      setNotice(
-                        user
-                          ? `${tier.name} checkout launches soon — you'll be able to upgrade right here.`
-                          : "Create a free account first, then upgrade anytime.",
-                      )
-                    }
+                    disabled={busy}
+                    onClick={() => void upgrade(tier.plan)}
                   >
                     {tier.cta}
                   </Button>

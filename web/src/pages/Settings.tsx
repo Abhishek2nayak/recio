@@ -92,6 +92,14 @@ export function Settings() {
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
       <p className="mt-0.5 text-sm text-muted">Manage where your recordings and screenshots are stored.</p>
 
+      {params.get("billing") === "success" && (
+        <div className="mt-4 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+          You're on Pro — thanks! It may take a moment to reflect.
+        </div>
+      )}
+
+      <PlanSection />
+
       {driveResult === "connected" && (
         <div className="mt-4 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           Google Drive connected.
@@ -231,6 +239,50 @@ export function Settings() {
 
       <BrandingSection />
     </div>
+  );
+}
+
+/** Current plan + a link to plans (free) or the Stripe billing portal (paid). */
+function PlanSection() {
+  const user = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const plan = user?.plan ?? "FREE";
+  const isPaid = plan !== "FREE";
+
+  async function manage() {
+    setBusy(true);
+    try {
+      const { url } = await api.billingPortal();
+      window.location.href = url;
+    } catch {
+      navigate("/pricing");
+    }
+  }
+
+  return (
+    <Card className="mt-6 flex items-center justify-between p-4">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-text-primary">Plan</span>
+        <span
+          className={
+            "rounded-full px-2 py-0.5 text-[11px] font-semibold " +
+            (isPaid ? "bg-highlight text-[#0A0A0A]" : "bg-bg-primary text-muted ring-1 ring-border")
+          }
+        >
+          {plan}
+        </span>
+      </div>
+      {isPaid ? (
+        <Button variant="secondary" size="sm" onClick={manage} disabled={busy}>
+          Manage billing
+        </Button>
+      ) : (
+        <Button variant="highlight" size="sm" onClick={() => navigate("/pricing")}>
+          Upgrade
+        </Button>
+      )}
+    </Card>
   );
 }
 

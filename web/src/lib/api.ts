@@ -7,6 +7,7 @@ import type {
   AnalyticsDTO,
   ApiResponse,
   BrandingDTO,
+  CheckoutInput,
   CreateShareInput,
   RecordViewInput,
   UpdateBrandingInput,
@@ -180,4 +181,9 @@ export const api = {
   getBranding: () => request<BrandingDTO>("/branding"),
   updateBranding: (body: UpdateBrandingInput) =>
     request<BrandingDTO>("/branding", { method: "PATCH", body }),
+
+  // billing
+  startCheckout: (body: CheckoutInput) =>
+    request<{ url: string }>("/billing/checkout", { method: "POST", body }),
+  billingPortal: () => request<{ url: string }>("/billing/portal", { method: "POST" }),
 };

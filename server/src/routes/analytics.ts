@@ -10,7 +10,7 @@
  * entitlement; free owners see total + unique and an upgrade nudge.
  */
 import { Router } from "express";
-import { can, ok, recordViewSchema, type AnalyticsDTO, type RecordViewInput } from "@flowcap/shared";
+import { ok, recordViewSchema, type AnalyticsDTO, type RecordViewInput } from "@flowcap/shared";
 import { asyncHandler } from "../middleware/error.js";
 import { requireAuth, getUserId } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
@@ -19,6 +19,7 @@ import { HttpError } from "../lib/http-error.js";
 import { prisma } from "../lib/prisma.js";
 import { findMediaByResource, findOwnedMediaById } from "../services/media-service.js";
 import { getAnalytics, recordView } from "../services/analytics-service.js";
+import { canFeature } from "../lib/entitlements.js";
 
 export const analyticsRouter: Router = Router();
 
@@ -43,7 +44,7 @@ analyticsRouter.get(
     if (!media) throw HttpError.notFound("Media not found.");
 
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-    const includePro = user ? can(user.plan, "fullAnalytics") : false;
+    const includePro = user ? canFeature(user.plan, "fullAnalytics") : false;
 
     const data: AnalyticsDTO = await getAnalytics(media.id, includePro);
     res.json(ok(data));

@@ -43,6 +43,13 @@ const envSchema = z.object({
 
   SIGNED_URL_TTL: z.coerce.number().int().positive().default(3600),
 
+  // TESTING ONLY: when "true", every account gets full (Business) entitlements so
+  // Pro/Business features can be exercised without paying. Turn OFF for production.
+  UNLOCK_ALL_FEATURES: z
+    .string()
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
+
   // Stripe billing — optional. The /billing endpoints stay inert (return "not enabled")
   // until STRIPE_SECRET_KEY is set, so the app boots and builds without an account.
   STRIPE_SECRET_KEY: z.string().default(""),

@@ -4,8 +4,8 @@
  * per-plan fair-use cap (entitlements.monthlyStreamGb) protects margins and makes the
  * "unlimited free" promise safe.
  */
-import { entitlementsFor } from "@flowcap/shared";
 import { prisma } from "../lib/prisma.js";
+import { resolveEntitlements } from "../lib/entitlements.js";
 
 const GB = 1024 * 1024 * 1024;
 
@@ -39,7 +39,7 @@ export async function getStreamUsage(userId: string): Promise<StreamUsage> {
     prisma.user.findUnique({ where: { id: userId }, select: { plan: true } }),
     prisma.usageCounter.findUnique({ where: { userId_periodStart: { userId, periodStart } } }),
   ]);
-  const capGb = user ? entitlementsFor(user.plan).monthlyStreamGb : 0;
+  const capGb = user ? resolveEntitlements(user.plan).monthlyStreamGb : 0;
   return {
     used: Number(counter?.proxyBytes ?? 0n),
     cap: capGb == null ? null : capGb * GB,

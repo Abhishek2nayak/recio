@@ -8,12 +8,12 @@ import {
   LinkVisibility,
   ResourceType,
   StorageProvider,
-  entitlementsFor,
   type RecordingDTO,
   type ScreenshotDTO,
   type StorageConnectionDTO,
   type UserDTO,
 } from "@flowcap/shared";
+import { resolveEntitlements } from "./entitlements.js";
 
 export function toUserDTO(u: User): UserDTO {
   return {
@@ -22,7 +22,7 @@ export function toUserDTO(u: User): UserDTO {
     name: u.name,
     avatar: u.avatar,
     plan: u.plan,
-    entitlements: entitlementsFor(u.plan),
+    entitlements: resolveEntitlements(u.plan),
     createdAt: u.createdAt.toISOString(),
   };
 }

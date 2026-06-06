@@ -10,7 +10,6 @@
  */
 import { Router } from "express";
 import {
-  can,
   ErrorCode,
   LinkVisibility,
   ResourceType,
@@ -37,6 +36,7 @@ import {
   setMediaVisibility,
 } from "../services/media-service.js";
 import { getPlaybackUrl } from "../services/storage-service.js";
+import { canFeature } from "../lib/entitlements.js";
 import {
   buildShareUrl,
   deleteShare,
@@ -112,7 +112,7 @@ shareRouter.get(
     });
     // Only apply branding while the owner's plan still includes it.
     const branding =
-      owner && can(owner.plan, "customBranding")
+      owner && canFeature(owner.plan, "customBranding")
         ? {
             brandName: owner.brandName,
             brandLogoUrl: owner.brandLogoUrl,

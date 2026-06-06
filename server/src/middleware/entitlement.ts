@@ -9,9 +9,10 @@
  * middleware; they never branch on `plan` themselves.
  */
 import type { RequestHandler } from "express";
-import { ErrorCode, can, type BooleanEntitlement } from "@flowcap/shared";
+import { ErrorCode, type BooleanEntitlement } from "@flowcap/shared";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/http-error.js";
+import { canFeature } from "../lib/entitlements.js";
 import { getUserId } from "./auth.js";
 
 export function requireEntitlement(capability: BooleanEntitlement): RequestHandler {
@@ -22,7 +23,7 @@ export function requireEntitlement(capability: BooleanEntitlement): RequestHandl
         select: { plan: true },
       });
       if (!user) throw HttpError.unauthenticated();
-      if (!can(user.plan, capability)) {
+      if (!canFeature(user.plan, capability)) {
         throw new HttpError(
           ErrorCode.UPGRADE_REQUIRED,
           "This feature requires a paid plan. Upgrade to unlock it.",

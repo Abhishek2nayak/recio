@@ -12,6 +12,7 @@ import type {
   InviteDTO,
   MemberDTO,
   RecordViewInput,
+  StreamUsageDTO,
   UpdateBrandingInput,
   WorkspaceDTO,
   LinkVisibility,
@@ -189,6 +190,9 @@ export const api = {
   startCheckout: (body: CheckoutInput) =>
     request<{ url: string }>("/billing/checkout", { method: "POST", body }),
   billingPortal: () => request<{ url: string }>("/billing/portal", { method: "POST" }),
+
+  // usage
+  getUsage: () => request<StreamUsageDTO>("/usage"),
 
   // workspaces (Business)
   listWorkspaces: () => request<{ workspaces: WorkspaceDTO[] }>("/workspaces"),

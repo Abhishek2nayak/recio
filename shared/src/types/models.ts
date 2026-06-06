@@ -117,6 +117,13 @@ export interface InviteDTO {
   createdAt: ISODateString;
 }
 
+/** Monthly playback-streaming usage vs the plan's fair-use cap (bytes). */
+export interface StreamUsageDTO {
+  used: number;
+  cap: number | null;
+  periodStart: ISODateString;
+}
+
 /** Pro custom-branding for a user's public share pages; null fields = Recio default. */
 export interface BrandingDTO {
   brandName: string | null;

@@ -11,12 +11,14 @@
  * element needing an Authorization header.
  */
 import { Router } from "express";
+import { ErrorCode } from "@flowcap/shared";
 import { asyncHandler } from "../middleware/error.js";
 import { param } from "../lib/params.js";
 import { HttpError } from "../lib/http-error.js";
 import { verifyPlaybackToken } from "../lib/jwt.js";
 import { findOwnedMediaById } from "../services/media-service.js";
 import { streamMedia } from "../services/storage-service.js";
+import { addProxyBytes, isOverStreamCap } from "../services/usage-service.js";
 
 export const mediaRouter: Router = Router();
 
@@ -37,6 +39,14 @@ mediaRouter.get(
     const media = await findOwnedMediaById(token.sub, id);
     if (!media) throw HttpError.notFound("Media not found.");
 
+    // Fair-use cap: stop proxying once the owner is over their monthly stream budget.
+    if (await isOverStreamCap(token.sub)) {
+      throw new HttpError(
+        ErrorCode.RATE_LIMITED,
+        "This video reached its monthly free-streaming limit. The owner can upgrade for more.",
+      );
+    }
+
     const { stream, status, headers } = await streamMedia(
       token.sub,
       media.storageProvider,
@@ -50,12 +60,20 @@ mediaRouter.get(
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
 
+    // Meter actual bytes streamed (counts partial/aborted reads accurately).
+    let sent = 0;
+    stream.on("data", (chunk: Buffer) => {
+      sent += chunk.length;
+    });
+    res.on("close", () => {
+      stream.destroy(); // abort the upstream Drive read on disconnect/seek
+      if (sent > 0) void addProxyBytes(token.sub, sent);
+    });
+
     stream.on("error", () => {
       if (!res.headersSent) res.status(502);
       res.end();
     });
-    // Abort the upstream Drive read if the client disconnects mid-stream (seek/close).
-    res.on("close", () => stream.destroy());
     stream.pipe(res);
   }),
 );

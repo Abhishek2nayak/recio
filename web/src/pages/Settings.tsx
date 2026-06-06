@@ -242,13 +242,22 @@ export function Settings() {
   );
 }
 
+function formatGb(bytes: number): string {
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(bytes >= 1024 ** 3 ? 1 : 2)} GB`;
+}
+
 /** Current plan + a link to plans (free) or the Stripe billing portal (paid). */
 function PlanSection() {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState<import("@flowcap/shared").StreamUsageDTO | null>(null);
   const plan = user?.plan ?? "FREE";
   const isPaid = plan !== "FREE";
+
+  useEffect(() => {
+    api.getUsage().then(setUsage).catch(() => {});
+  }, []);
 
   async function manage() {
     setBusy(true);
@@ -260,7 +269,10 @@ function PlanSection() {
     }
   }
 
+  const pct = usage && usage.cap ? Math.min(100, Math.round((usage.used / usage.cap) * 100)) : 0;
+
   return (
+    <>
     <Card className="mt-6 flex items-center justify-between p-4">
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-text-primary">Plan</span>
@@ -283,6 +295,27 @@ function PlanSection() {
         </Button>
       )}
     </Card>
+
+    {usage && usage.cap != null && (
+      <Card className="mt-3 p-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium text-text-primary">Streaming this month</span>
+          <span className="font-mono text-xs text-muted">
+            {formatGb(usage.used)} / {formatGb(usage.cap)}
+          </span>
+        </div>
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-bg-primary ring-1 ring-border">
+          <div
+            className={"h-full rounded-full " + (pct >= 90 ? "bg-danger" : "bg-highlight")}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <p className="mt-1.5 text-[11px] text-muted">
+          Bandwidth for shared playback. {isPaid ? "" : "Upgrade for more headroom."}
+        </p>
+      </Card>
+    )}
+    </>
   );
 }
 

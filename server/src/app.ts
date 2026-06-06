@@ -24,6 +24,7 @@ import { analyticsRouter } from "./routes/analytics.js";
 import { brandingRouter } from "./routes/branding.js";
 import { billingRouter, billingWebhookHandler } from "./routes/billing.js";
 import { workspacesRouter } from "./routes/workspaces.js";
+import { usageRouter } from "./routes/usage.js";
 
 export function createApp(): Express {
   const app = express();
@@ -71,6 +72,7 @@ export function createApp(): Express {
   app.use("/branding", brandingRouter);
   app.use("/billing", billingRouter);
   app.use("/workspaces", workspacesRouter);
+  app.use("/usage", usageRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

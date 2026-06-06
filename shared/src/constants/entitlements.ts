@@ -29,6 +29,9 @@ export interface Entitlements {
   folders: boolean;
   /** AI transcript + summary minutes included per period (0 = none; overage metered). */
   aiMinutesIncluded: number;
+  /** Fair-use cap on bytes streamed through our playback proxy per month, in GB.
+   *  `null` = unlimited. Protects margins (the proxy is our one real bandwidth cost). */
+  monthlyStreamGb: number | null;
   /** Opt into Recio-hosted (FLOWCAP) storage instead of bring-your-own-cloud. */
   hostedStorage: boolean;
   /** Shared team workspace, roles, SSO, admin, API/webhooks. */
@@ -45,6 +48,7 @@ export const ENTITLEMENTS: Record<Plan, Entitlements> = {
     fullAnalytics: false,
     folders: false,
     aiMinutesIncluded: 5, // trial taste of AI
+    monthlyStreamGb: 25, // generous fair-use; only bites on heavy/viral use
     hostedStorage: false,
     team: false,
   },
@@ -57,6 +61,7 @@ export const ENTITLEMENTS: Record<Plan, Entitlements> = {
     fullAnalytics: true,
     folders: true,
     aiMinutesIncluded: 300,
+    monthlyStreamGb: 250,
     hostedStorage: true,
     team: false,
   },
@@ -69,6 +74,7 @@ export const ENTITLEMENTS: Record<Plan, Entitlements> = {
     fullAnalytics: true,
     folders: true,
     aiMinutesIncluded: 1000, // pooled across the team
+    monthlyStreamGb: null, // unlimited
     hostedStorage: true,
     team: true,
   },

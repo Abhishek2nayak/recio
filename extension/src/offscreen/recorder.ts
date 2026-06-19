@@ -108,6 +108,9 @@ function sendTick(state: "recording" | "paused"): void {
 }
 
 async function start(streamId: string): Promise<void> {
+  // A second OFFSCREEN_START while recording would overwrite the module-level
+  // recorder/chunks and silently destroy the in-flight recording. Refuse it.
+  if (recorder && recorder.state !== "inactive") return;
   settled = false;
   try {
     await acquire(streamId);

@@ -10,7 +10,10 @@ import { prisma } from "../lib/prisma.js";
 import { env } from "../config/env.js";
 
 export function buildShareUrl(token: string): string {
-  return `${env.WEB_ORIGIN}/s/${token}`;
+  // The API's /s/:token preview page is the canonical link: it serves per-video
+  // Open Graph tags to crawlers (Slack/Teams/Gmail unfurls) and instantly
+  // redirects humans to the SPA share page on WEB_ORIGIN.
+  return `${env.API_PUBLIC_URL}/s/${token}`;
 }
 
 export function upsertShare(params: {

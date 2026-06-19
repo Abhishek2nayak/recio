@@ -18,10 +18,12 @@ import {
   ErrorCode,
   ok,
   StorageProvider,
+  changePasswordSchema,
   googleCodeSchema,
   googleSignInSchema,
   loginSchema,
   registerSchema,
+  updateProfileSchema,
 } from "@flowcap/shared";
 import type { User } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
@@ -181,5 +183,43 @@ authRouter.get(
     const user = await prisma.user.findUnique({ where: { id: getUserId(req) } });
     if (!user) throw HttpError.notFound("User not found.");
     res.json(ok({ user: toUserDTO(user) }));
+  }),
+);
+
+// ── Profile management ──
+authRouter.patch(
+  "/me",
+  requireAuth,
+  validate(updateProfileSchema),
+  asyncHandler(async (req, res) => {
+    const { name } = req.body as import("@flowcap/shared").UpdateProfileInput;
+    const user = await prisma.user.update({ where: { id: getUserId(req) }, data: { name } });
+    res.json(ok({ user: toUserDTO(user) }));
+  }),
+);
+
+/**
+ * Change (or set) the password. Accounts created via "Sign in with Google" have no
+ * password yet — they may set one without `currentPassword`; everyone else must
+ * present the current one.
+ */
+authRouter.post(
+  "/password",
+  requireAuth,
+  validate(changePasswordSchema),
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body as import("@flowcap/shared").ChangePasswordInput;
+    const user = await prisma.user.findUnique({ where: { id: getUserId(req) } });
+    if (!user) throw HttpError.notFound("User not found.");
+    if (user.passwordHash) {
+      if (!currentPassword || !(await verifyPassword(currentPassword, user.passwordHash))) {
+        throw new HttpError(ErrorCode.INVALID_CREDENTIALS, "The current password is incorrect.");
+      }
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(newPassword) },
+    });
+    res.json(ok({ changed: true }));
   }),
 );

@@ -15,12 +15,39 @@ import { env } from "../config/env.js";
 import { decryptSecret } from "../lib/crypto.js";
 import { HttpError } from "../lib/http-error.js";
 import {
+  markConnectionBroken,
   requireDriveConnection,
   setDriveFolderId,
   updateDriveAccessToken,
 } from "./connection-service.js";
 
 const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files";
+
+/** Google's refresh-token-dead signals: revoked from the security page, expired, etc. */
+function isRevokedGrant(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /invalid_grant|invalid_rapt|account.* (disabled|deleted)/i.test(msg);
+}
+
+/**
+ * Run a Drive call; if it fails because the grant was revoked, flag the connection
+ * broken (so /storage/status and the clients can show "reconnect") and convert the
+ * raw Google error into a structured, user-facing one.
+ */
+async function guardAuth<T>(conn: StorageConnection, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isRevokedGrant(err)) {
+      await markConnectionBroken(conn.id);
+      throw new HttpError(
+        ErrorCode.STORAGE_RECONNECT_REQUIRED,
+        "Google Drive access was revoked or expired. Reconnect Drive in Settings to keep recording and playing your videos.",
+      );
+    }
+    throw err;
+  }
+}
 
 /** Build an OAuth2 client primed with the connection's tokens; persist refreshes. */
 function buildClient(conn: StorageConnection): OAuth2Client {
@@ -51,12 +78,32 @@ async function getClient(userId: string): Promise<{ client: OAuth2Client; conn: 
   return { client: buildClient(conn), conn };
 }
 
+/**
+ * True if the cached folder still exists and isn't in the trash. Drive happily
+ * creates files inside a TRASHED parent (uploads would "succeed" invisibly), so a
+ * cheap metadata check before each session init is worth the round-trip.
+ */
+async function folderIsUsable(client: OAuth2Client, folderId: string): Promise<boolean> {
+  const drive = google.drive({ version: "v3", auth: client });
+  try {
+    const res = await drive.files.get({ fileId: folderId, fields: "trashed" });
+    return res.data.trashed !== true;
+  } catch {
+    return false; // 404 = hard-deleted
+  }
+}
+
 /** Find (or create) the user's Recio folder, caching its id on the connection. */
 async function ensureFolder(
   client: OAuth2Client,
   conn: StorageConnection,
 ): Promise<string> {
-  if (conn.defaultFolderId) return conn.defaultFolderId;
+  if (conn.defaultFolderId) {
+    if (await folderIsUsable(client, conn.defaultFolderId)) return conn.defaultFolderId;
+    // Folder was deleted or trashed in Drive — drop the stale cache and re-resolve.
+    await setDriveFolderId(conn.id, null);
+    conn.defaultFolderId = null;
+  }
 
   const drive = google.drive({ version: "v3", auth: client });
   const q = [
@@ -97,52 +144,73 @@ export async function initiateResumableUpload(
   params: { fileName: string; mimeType: string },
 ): Promise<ResumableSession> {
   const { client, conn } = await getClient(userId);
-  const folderId = await ensureFolder(client, conn);
+  return guardAuth(conn, async () => {
+    let folderId = await ensureFolder(client, conn);
 
-  const accessToken = (await client.getAccessToken()).token;
-  if (!accessToken) throw new HttpError(ErrorCode.DRIVE_AUTH_FAILED, "No Drive access token.");
+    const accessToken = (await client.getAccessToken()).token;
+    if (!accessToken) throw new HttpError(ErrorCode.DRIVE_AUTH_FAILED, "No Drive access token.");
 
-  const res = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=resumable&fields=id`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json; charset=UTF-8",
-      "X-Upload-Content-Type": params.mimeType,
-    },
-    body: JSON.stringify({ name: params.fileName, parents: [folderId], mimeType: params.mimeType }),
+    const open = (parent: string) =>
+      fetch(`${DRIVE_UPLOAD_URL}?uploadType=resumable&fields=id`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Type": params.mimeType,
+        },
+        body: JSON.stringify({ name: params.fileName, parents: [parent], mimeType: params.mimeType }),
+      });
+
+    let res = await open(folderId);
+    if (res.status === 404) {
+      // Folder vanished between the usability check and the init — recreate once.
+      await setDriveFolderId(conn.id, null);
+      conn.defaultFolderId = null;
+      folderId = await ensureFolder(client, conn);
+      res = await open(folderId);
+    }
+    if (!res.ok) {
+      throw new HttpError(ErrorCode.UPLOAD_FAILED, `Drive session init failed (${res.status}).`);
+    }
+    const sessionUri = res.headers.get("location");
+    if (!sessionUri) throw new HttpError(ErrorCode.UPLOAD_FAILED, "Drive returned no session URI.");
+
+    return { sessionUri, folderId };
   });
-  if (!res.ok) {
-    throw new HttpError(ErrorCode.UPLOAD_FAILED, `Drive session init failed (${res.status}).`);
-  }
-  const sessionUri = res.headers.get("location");
-  if (!sessionUri) throw new HttpError(ErrorCode.UPLOAD_FAILED, "Drive returned no session URI.");
-
-  return { sessionUri, folderId };
 }
 
 /** Make a Drive file readable by "anyone with the link". */
 export async function setPublicPermission(userId: string, fileId: string): Promise<void> {
-  const { client } = await getClient(userId);
+  const { client, conn } = await getClient(userId);
   const drive = google.drive({ version: "v3", auth: client });
-  try {
-    await drive.permissions.create({
-      fileId,
-      requestBody: { role: "reader", type: "anyone", allowFileDiscovery: false },
-    });
-  } catch (err) {
-    throw new HttpError(ErrorCode.DRIVE_API_ERROR, `Could not make the file public: ${asMsg(err)}`);
-  }
+  await guardAuth(conn, async () => {
+    try {
+      await drive.permissions.create({
+        fileId,
+        requestBody: { role: "reader", type: "anyone", allowFileDiscovery: false },
+      });
+      // Lock the file down for link viewers: no download / copy / print from
+      // Drive's own UI (and they can never alter sharing — readers can't).
+      // Recipients watch through our player; the owner keeps full control.
+      await drive.files.update({ fileId, requestBody: { copyRequiresWriterPermission: true } });
+    } catch (err) {
+      if (isRevokedGrant(err)) throw err; // let guardAuth classify it
+      throw new HttpError(ErrorCode.DRIVE_API_ERROR, `Could not make the file public: ${asMsg(err)}`);
+    }
+  });
 }
 
 /** Revoke the "anyone" permission, making the file private again. */
 export async function removePublicPermission(userId: string, fileId: string): Promise<void> {
-  const { client } = await getClient(userId);
+  const { client, conn } = await getClient(userId);
   const drive = google.drive({ version: "v3", auth: client });
-  const perms = await drive.permissions.list({ fileId, fields: "permissions(id,type)" });
-  const anyone = perms.data.permissions?.find((p) => p.type === "anyone");
-  if (anyone?.id) {
-    await drive.permissions.delete({ fileId, permissionId: anyone.id });
-  }
+  await guardAuth(conn, async () => {
+    const perms = await drive.permissions.list({ fileId, fields: "permissions(id,type)" });
+    const anyone = perms.data.permissions?.find((p) => p.type === "anyone");
+    if (anyone?.id) {
+      await drive.permissions.delete({ fileId, permissionId: anyone.id });
+    }
+  });
 }
 
 export async function deleteFile(userId: string, fileId: string): Promise<void> {
@@ -180,11 +248,13 @@ export async function streamFile(
   fileId: string,
   range?: string,
 ): Promise<DriveStream> {
-  const { client } = await getClient(userId);
+  const { client, conn } = await getClient(userId);
   const drive = google.drive({ version: "v3", auth: client });
-  const res = await drive.files.get(
-    { fileId, alt: "media", supportsAllDrives: true },
-    { responseType: "stream", headers: range ? { Range: range } : {} },
+  const res = await guardAuth(conn, () =>
+    drive.files.get(
+      { fileId, alt: "media", supportsAllDrives: true },
+      { responseType: "stream", headers: range ? { Range: range } : {} },
+    ),
   );
 
   const headers: Record<string, string> = { "accept-ranges": "bytes" };

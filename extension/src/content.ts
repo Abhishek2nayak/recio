@@ -12,14 +12,17 @@
  * into every page stays tiny.
  */
 import { sendMessage, type Message, type Rect } from "./lib/messages.js";
-import { getSettings } from "./lib/storage.js";
+import { CAMERA_SIZE_PX, getSettings } from "./lib/storage.js";
 
-const ACCENT = "#CCFF00"; // electric kiwi — pairs with black text only
-const DANGER = "#EF4444";
-const CARD = "#18181B";
-const BORDER = "#27272A";
-const TEXT = "#FAFAFA";
-const MUTED = "#A1A1AA";
+// Vyooom HUD palette (hex approximations of the oklch tokens — this bar lives in a
+// shadow DOM and can't read the page's CSS vars).
+const ACCENT = "#38C6DD"; // Tide cyan — the electric pop; pairs with dark text only
+const ACCENT_INK = "#06303A"; // readable foreground on ACCENT
+const DANGER = "#DC2626";
+const CARD = "#28283A"; // --hud (near-black glass)
+const BORDER = "#52525F"; // --hud-line
+const TEXT = "#F2F2F5"; // --hud-ink
+const MUTED = "#A9A9B6"; // --hud-ink-2
 
 let shadow: ShadowRoot | null = null;
 
@@ -81,7 +84,7 @@ function renderBar(): void {
   const dot = bar.querySelector<HTMLElement>(".fc-dot")!;
   pauseBtn.innerHTML = barState.state === "recording" ? ICON_PAUSE : ICON_PLAY;
   pauseBtn.title = barState.state === "recording" ? "Pause" : "Resume";
-  dot.style.background = barState.state === "recording" ? DANGER : "#F59E0B";
+  dot.style.background = barState.state === "recording" ? ACCENT : "#F59E0B";
   dot.style.animation = barState.state === "recording" ? "fc-pulse 1.2s infinite" : "none";
 }
 
@@ -106,7 +109,7 @@ function setRecordingState(s: { active: boolean; state: "recording" | "paused"; 
 
 // ── 1b. On-page camera bubble (Loom-style, follows the visible tab) ────────────
 // The bubble is an extension-origin iframe so the camera permission is granted ONCE
-// for Recio (not per website). Only the *visible* tab mounts it, so there's one
+// for Vyooom (not per website). Only the *visible* tab mounts it, so there's one
 // camera stream at a time and the screen recording captures it wherever you are.
 let recordingActive = false;
 let cameraEl: HTMLElement | null = null;
@@ -114,24 +117,35 @@ let cameraEl: HTMLElement | null = null;
 async function syncCamera(): Promise<void> {
   let cameraEnabled = false;
   let deviceId = "";
+  let size = 160;
+  let corner: "bottom-left" | "bottom-right" | "top-left" | "top-right" = "bottom-left";
   if (recordingActive) {
     try {
       const s = await getSettings();
       cameraEnabled = s.camera;
       deviceId = s.cameraDeviceId;
+      size = CAMERA_SIZE_PX[s.cameraSize] ?? 160;
+      corner = s.cameraCorner;
     } catch {
       cameraEnabled = false;
     }
   }
   const shouldShow = recordingActive && cameraEnabled && document.visibilityState === "visible";
-  if (shouldShow) showCamera(deviceId);
+  if (shouldShow) showCamera(deviceId, size, corner);
   else hideCamera();
 }
 
-function showCamera(deviceId: string): void {
+function showCamera(deviceId: string, size: number, corner: string): void {
   if (cameraEl) return;
   const wrap = document.createElement("div");
   wrap.className = "fc-cam";
+  // Apply chosen diameter + corner (overrides the stylesheet defaults).
+  wrap.style.width = `${size}px`;
+  wrap.style.height = `${size}px`;
+  wrap.style.top = corner.startsWith("top") ? "24px" : "";
+  wrap.style.bottom = corner.startsWith("top") ? "" : "24px";
+  wrap.style.left = corner.endsWith("left") ? "24px" : "";
+  wrap.style.right = corner.endsWith("left") ? "" : "24px";
   const iframe = document.createElement("iframe");
   const base = chrome.runtime.getURL("src/camera/index.html");
   iframe.src = deviceId ? `${base}?device=${encodeURIComponent(deviceId)}` : base;
@@ -336,11 +350,11 @@ const CSS = `
   padding: 8px; border-radius: 999px; background: ${CARD}f2; border: 1px solid ${BORDER};
   box-shadow: 0 12px 32px rgba(0,0,0,.5); pointer-events: auto; backdrop-filter: blur(8px);
 }
-.fc-stop { width: 42px; height: 42px; border-radius: 999px; border: none; background: ${DANGER};
+.fc-stop { width: 42px; height: 42px; border-radius: 999px; border: none; background: ${ACCENT};
   display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.fc-stop span { width: 13px; height: 13px; border-radius: 3px; background: #fff; }
+.fc-stop span { width: 13px; height: 13px; border-radius: 3px; background: ${ACCENT_INK}; }
 .fc-dot-wrap { display: flex; flex-direction: column; align-items: center; margin: 2px 0; }
-.fc-dot { width: 8px; height: 8px; border-radius: 999px; background: ${DANGER}; }
+.fc-dot { width: 8px; height: 8px; border-radius: 999px; background: ${ACCENT}; box-shadow: 0 0 8px ${ACCENT}; }
 .fc-time { font-family: ui-monospace, monospace; font-size: 11px; color: ${TEXT}; margin-top: 3px; }
 .fc-ctrl { width: 34px; height: 34px; border-radius: 999px; border: none; background: transparent;
   color: ${MUTED}; display: flex; align-items: center; justify-content: center; cursor: pointer; }

@@ -165,9 +165,17 @@ model Recording {
   // words / silences). The file is untouched. null = no cleanup applied.
   cuts Json?
 
+  // Non-destructive overlays drawn over the video at playback: text labels, boxes,
+  // and blur regions — [{id,type,x,y,w,h,startSec,endSec,text?,color?}] with x/y/w/h
+  // as 0..1 fractions of the frame. The file is untouched. null = none.
+  overlays Json?
+
   storageProvider StorageProvider
-  storageFileId   String // Drive file ID or FlowCap S3 object key
-  thumbnailUrl    String?
+  storageFileId   String // Drive file ID or FlowCap S3 object key; "" while UPLOADING
+  // Instant-link lifecycle: the row (and its share token) can exist before the bytes
+  // land. 'UPLOADING' → share page shows "processing"; 'READY' → playable.
+  uploadStatus    String  @default("READY")
+  thumbnailUrl    String? // Recio-storage key (or absolute URL) of the poster image
 
   shareToken String  @unique @default(cuid())
   isPublic   Boolean @default(false)
@@ -245,6 +253,19 @@ model Reaction {
   updatedAt    DateTime     @updatedAt
 
   @@unique([resourceId, emoji])
+}
+
+// One emoji left at a moment in the video — drives the Loom-style bursts along the
+// player timeline. Aggregates stay in `Reaction`; this is the per-event timeline.
+model ReactionEvent {
+  id           String       @id @default(cuid())
+  resourceType ResourceType
+  resourceId   String
+  emoji        String
+  timestampSec Float
+  createdAt    DateTime     @default(now())
+
+  @@index([resourceId, timestampSec])
   @@index([resourceId])
 }
 

@@ -9,6 +9,7 @@ import type {
   CreateRecordingInput,
   CreateScreenshotInput,
   CreateShareInput,
+  FinalizeRecordingInput,
   InitiateDriveUploadInput,
   InitiateDriveUploadResult,
   InitiateDropboxUploadResult,
@@ -132,6 +133,8 @@ export const api = {
   // ── metadata ──
   createRecording: (body: CreateRecordingInput) =>
     request<{ recording: RecordingDTO }>("/recordings", { method: "POST", body }),
+  finalizeRecording: (id: string, body: FinalizeRecordingInput) =>
+    request<{ recording: RecordingDTO }>(`/recordings/${id}/finalize`, { method: "POST", body }),
   createScreenshot: (body: CreateScreenshotInput) =>
     request<{ screenshot: ScreenshotDTO }>("/screenshots", { method: "POST", body }),
 

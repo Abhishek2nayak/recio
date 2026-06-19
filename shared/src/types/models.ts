@@ -71,17 +71,24 @@ interface MediaBase {
   updatedAt: ISODateString;
 }
 
+/** Instant-link lifecycle: UPLOADING = link exists, bytes still in flight. */
+export type UploadStatus = "UPLOADING" | "READY";
+
 export interface RecordingDTO extends MediaBase {
   resourceType: typeof ResourceType.RECORDING;
   description: string | null;
   /** Seconds. */
   duration: number;
   mimeType: VideoMimeType;
+  /** UPLOADING while the bytes are still in flight (instant-link flow). */
+  uploadStatus: UploadStatus;
   /** Non-destructive trim bounds (seconds); null = no trim. Players clamp to these. */
   trimStartSec: number | null;
   trimEndSec: number | null;
   /** Smart-cleanup skip ranges; null/[] = none. Players jump over these. */
   cuts: CutSegment[] | null;
+  /** Non-destructive overlays (text/box/blur) drawn over playback; null/[] = none. */
+  overlays: Overlay[] | null;
 }
 
 export interface ScreenshotDTO extends MediaBase {
@@ -141,6 +148,21 @@ export interface CutSegment {
   end: number;
 }
 
+/** A non-destructive overlay drawn over the video at playback (text / box / blur).
+ *  x,y,w,h are fractions (0..1) of the frame; visible during [startSec, endSec]. */
+export interface Overlay {
+  id: string;
+  type: "text" | "rect" | "blur";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  startSec: number;
+  endSec: number;
+  text?: string;
+  color?: string;
+}
+
 /** Result of running smart cleanup on a recording. */
 export interface CleanupResultDTO {
   cuts: CutSegment[];
@@ -150,6 +172,13 @@ export interface CleanupResultDTO {
   savedSec: number;
 }
 
+/** One ASR word with its time bounds (seconds) — powers captions + smart cleanup. */
+export interface TranscriptWord {
+  word: string;
+  start: number;
+  end: number;
+}
+
 /** AI transcript + summary for a recording. `null` from the API = not generated yet. */
 export interface TranscriptDTO {
   status: TranscriptStatus;
@@ -157,6 +186,8 @@ export interface TranscriptDTO {
   title: string | null;
   summary: string | null;
   text: string | null;
+  /** Word-level timestamps when available — clients build captions (VTT) from these. */
+  words: TranscriptWord[] | null;
   error: string | null;
 }
 
@@ -196,14 +227,20 @@ export interface PublicShareViewDTO {
   resourceId: string;
   title: string;
   mimeType: VideoMimeType | ImageMimeType;
-  /** Drive view URL or a time-limited signed Recio URL. */
+  /** Drive view URL or a time-limited signed Recio URL. Empty while `processing`. */
   playbackUrl: string;
+  /** True while the recording's bytes are still uploading (instant-link flow). */
+  processing: boolean;
+  /** Canonical share URL (link-preview-capable) — what "Copy link" should copy. */
+  shareUrl: string;
   duration: number | null;
   /** Non-destructive trim bounds (seconds, recordings); null = none. */
   trimStartSec: number | null;
   trimEndSec: number | null;
   /** Smart-cleanup skip ranges; null/[] = none. */
   cuts: CutSegment[] | null;
+  /** Non-destructive overlays (text/box/blur) drawn over playback; null/[] = none. */
+  overlays: Overlay[] | null;
   viewCount: number;
   ownerName: string | null;
   /** Owner's custom branding, resolved only when their plan includes it; else null. */

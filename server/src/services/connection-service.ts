@@ -24,13 +24,18 @@ export async function getDefaultProvider(userId: string): Promise<StorageProvide
 
 /** Load the active Drive connection or fail with a clear, structured error. */
 export async function requireDriveConnection(userId: string): Promise<StorageConnection> {
-  const conn = await prisma.storageConnection.findFirst({
-    where: { userId, provider: StorageProvider.DRIVE, isActive: true },
-  });
-  if (!conn?.refreshToken) {
-    throw new HttpError(ErrorCode.STORAGE_NOT_CONNECTED, "Google Drive is not connected.");
-  }
-  return conn;
+  return requireConnection(userId, StorageProvider.DRIVE);
+}
+
+/**
+ * Flag a connection as broken (refresh token revoked/expired). The row is kept so
+ * the UI can show "reconnect" instead of "connect", and so the account email is
+ * still known for the reconnect-same-account check.
+ */
+export async function markConnectionBroken(connectionId: string): Promise<void> {
+  await prisma.storageConnection
+    .update({ where: { id: connectionId }, data: { isActive: false } })
+    .catch(() => {}); // already deleted → nothing to mark
 }
 
 /**
@@ -41,6 +46,7 @@ export async function saveDriveConnection(userId: string, tokens: DriveTokens): 
   const existing = await prisma.storageConnection.findUnique({
     where: { userId_provider: { userId, provider: StorageProvider.DRIVE } },
   });
+  assertSameAccount(existing, tokens.email, "Google Drive");
 
   const encryptedRefresh = tokens.refreshToken
     ? encryptSecret(tokens.refreshToken)
@@ -80,7 +86,7 @@ export async function updateDriveAccessToken(
   });
 }
 
-export async function setDriveFolderId(connectionId: string, folderId: string): Promise<void> {
+export async function setDriveFolderId(connectionId: string, folderId: string | null): Promise<void> {
   await prisma.storageConnection.update({
     where: { id: connectionId },
     data: { defaultFolderId: folderId },
@@ -98,6 +104,27 @@ export async function disconnectDrive(userId: string): Promise<void> {
   });
 }
 
+/**
+ * Refuse a silent account swap. Files already saved live in the OLD account; if we
+ * quietly switched tokens, every existing recording (and every shared link) would
+ * 404 because the new account can't read the old account's files. The user must
+ * disconnect explicitly first — the disconnect UI spells out the consequences.
+ */
+function assertSameAccount(
+  existing: StorageConnection | null,
+  newEmail: string | null,
+  providerLabel: string,
+): void {
+  if (!existing?.driveEmail || !newEmail) return;
+  if (existing.driveEmail.toLowerCase() === newEmail.toLowerCase()) return;
+  throw new HttpError(
+    ErrorCode.STORAGE_ACCOUNT_MISMATCH,
+    `${providerLabel} is already connected as ${existing.driveEmail}, but you authorized ${newEmail}. ` +
+      `Recordings already saved there would stop playing if we switched accounts. ` +
+      `Reconnect with ${existing.driveEmail}, or disconnect it first to switch.`,
+  );
+}
+
 /** Generic OAuth token bundle (Drive + Dropbox share the same shape). */
 export interface OAuthTokens {
   accessToken: string;
@@ -106,16 +133,24 @@ export interface OAuthTokens {
   email: string | null;
 }
 
-/** Load any active connection for a provider, or fail clearly. */
+/**
+ * Load the connection for a provider, or fail clearly. Distinguishes "never
+ * connected" from "connected but broken" (revoked/expired grant) so clients can
+ * show a reconnect prompt instead of a generic connect button.
+ */
 export async function requireConnection(
   userId: string,
   provider: StorageProvider,
 ): Promise<StorageConnection> {
-  const conn = await prisma.storageConnection.findFirst({
-    where: { userId, provider, isActive: true },
-  });
+  const conn = await prisma.storageConnection.findFirst({ where: { userId, provider } });
   if (!conn?.refreshToken) {
     throw new HttpError(ErrorCode.STORAGE_NOT_CONNECTED, `${provider} is not connected.`);
+  }
+  if (!conn.isActive) {
+    throw new HttpError(
+      ErrorCode.STORAGE_RECONNECT_REQUIRED,
+      `Access to ${provider} was revoked or expired. Reconnect it in Settings.`,
+    );
   }
   return conn;
 }
@@ -128,6 +163,7 @@ export async function saveDropboxConnection(
   const existing = await prisma.storageConnection.findUnique({
     where: { userId_provider: { userId, provider: StorageProvider.DROPBOX } },
   });
+  assertSameAccount(existing, tokens.email, "Dropbox");
   const encryptedRefresh = tokens.refreshToken
     ? encryptSecret(tokens.refreshToken)
     : existing?.refreshToken ?? null;

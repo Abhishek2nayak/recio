@@ -3,7 +3,7 @@
  * dashboard filter/sort/search, owner-scoped lookups, and soft delete so the route
  * handlers stay thin. Soft-deleted rows (`deletedAt != null`) are always excluded.
  */
-import type { Prisma, Recording, Screenshot } from "@prisma/client";
+import { Prisma, type Recording, type Screenshot } from "@prisma/client";
 import {
   ResourceType,
   StorageProvider,
@@ -15,6 +15,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/http-error.js";
 import { deleteStoredObject, setPublicAccess } from "./storage-service.js";
+import { requireHostedStorage } from "./entitlement-gates.js";
 import { requireMember } from "./workspace-service.js";
 
 type Order = Prisma.RecordingOrderByWithRelationInput[];
@@ -217,7 +218,10 @@ export async function incrementViewCount(type: ResourceType, id: string): Promis
 
 // ── Mutations ───────────────────────────────────────────────────────────────
 
-export function createRecording(userId: string, input: CreateRecordingInput): Promise<Recording> {
+export async function createRecording(userId: string, input: CreateRecordingInput): Promise<Recording> {
+  // Saving to Recio Cloud is Premium; BYO-storage (Drive/Dropbox) is always free.
+  // Gating here means instant-link flows fail BEFORE any bytes move.
+  if (input.storageProvider === StorageProvider.FLOWCAP) await requireHostedStorage(userId);
   return prisma.recording.create({
     data: {
       userId,
@@ -227,13 +231,46 @@ export function createRecording(userId: string, input: CreateRecordingInput): Pr
       size: BigInt(input.size),
       mimeType: input.mimeType,
       storageProvider: input.storageProvider,
-      storageFileId: input.storageFileId,
+      // Instant-link flow: no file id yet → the row exists so a share link can be
+      // handed out at record-stop; finalizeRecording attaches the bytes later.
+      storageFileId: input.storageFileId ?? "",
+      uploadStatus: input.storageFileId ? "READY" : "UPLOADING",
       thumbnailUrl: input.thumbnailUrl ?? null,
     },
   });
 }
 
-export function createScreenshot(userId: string, input: CreateScreenshotInput): Promise<Screenshot> {
+/**
+ * Complete an instant-link upload: attach the landed bytes to the pending row. If a
+ * share was created while the upload was in flight (it usually was — that's the
+ * point), the storage-level ACL could not be applied then; apply it now.
+ */
+export async function finalizeRecording(
+  userId: string,
+  id: string,
+  input: { storageFileId: string; size?: number; thumbnailKey?: string },
+): Promise<Recording> {
+  const existing = await findOwnedRecording(userId, id);
+  if (!existing) throw HttpError.notFound("Recording not found.");
+
+  const updated = await prisma.recording.update({
+    where: { id },
+    data: {
+      storageFileId: input.storageFileId,
+      uploadStatus: "READY",
+      ...(input.size ? { size: BigInt(input.size) } : {}),
+      ...(input.thumbnailKey ? { thumbnailUrl: input.thumbnailKey } : {}),
+    },
+  });
+
+  if (existing.isPublic) {
+    await setPublicAccess(userId, updated.storageProvider, updated.storageFileId, true);
+  }
+  return updated;
+}
+
+export async function createScreenshot(userId: string, input: CreateScreenshotInput): Promise<Screenshot> {
+  if (input.storageProvider === StorageProvider.FLOWCAP) await requireHostedStorage(userId);
   return prisma.screenshot.create({
     data: {
       userId,
@@ -264,7 +301,11 @@ export async function setMediaVisibility(
       : await findOwnedScreenshot(userId, id);
   if (!media) throw HttpError.notFound("Media not found.");
 
-  await setPublicAccess(userId, media.storageProvider, media.storageFileId, isPublic);
+  // Pending instant-link rows have no bytes in storage yet — record the intent and
+  // let finalizeRecording apply the storage ACL once the file exists.
+  if (media.storageFileId) {
+    await setPublicAccess(userId, media.storageProvider, media.storageFileId, isPublic);
+  }
 
   return type === ResourceType.RECORDING
     ? prisma.recording.update({ where: { id }, data: { isPublic } })
@@ -279,7 +320,7 @@ export async function updateRecording(
 ): Promise<Recording> {
   const existing = await findOwnedRecording(userId, id);
   if (!existing) throw HttpError.notFound("Recording not found.");
-  if (input.isPublic !== undefined && input.isPublic !== existing.isPublic) {
+  if (input.isPublic !== undefined && input.isPublic !== existing.isPublic && existing.storageFileId) {
     await setPublicAccess(userId, existing.storageProvider, existing.storageFileId, input.isPublic);
   }
   if (input.workspaceId) await requireMember(userId, input.workspaceId);
@@ -291,6 +332,14 @@ export async function updateRecording(
       ...(input.isPublic !== undefined ? { isPublic: input.isPublic } : {}),
       ...(input.trimStartSec !== undefined ? { trimStartSec: input.trimStartSec } : {}),
       ...(input.trimEndSec !== undefined ? { trimEndSec: input.trimEndSec } : {}),
+      ...(input.overlays !== undefined
+        ? {
+            overlays:
+              input.overlays === null
+                ? Prisma.DbNull
+                : (input.overlays as unknown as Prisma.InputJsonValue),
+          }
+        : {}),
       ...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
     },
   });

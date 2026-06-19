@@ -11,10 +11,13 @@ const Landing = lazy(() => import("./pages/Landing.js").then((m) => ({ default: 
 const Login = lazy(() => import("./pages/Login.js").then((m) => ({ default: m.Login })));
 const Register = lazy(() => import("./pages/Register.js").then((m) => ({ default: m.Register })));
 const Dashboard = lazy(() => import("./pages/Dashboard.js").then((m) => ({ default: m.Dashboard })));
+const Launcher = lazy(() => import("./pages/Launcher.js").then((m) => ({ default: m.Launcher })));
+const Recording = lazy(() => import("./pages/Recording.js").then((m) => ({ default: m.Recording })));
 const Whiteboard = lazy(() => import("./pages/Whiteboard.js").then((m) => ({ default: m.Whiteboard })));
 const RecordingView = lazy(() => import("./pages/RecordingView.js").then((m) => ({ default: m.RecordingView })));
 const ScreenshotView = lazy(() => import("./pages/ScreenshotView.js").then((m) => ({ default: m.ScreenshotView })));
 const Settings = lazy(() => import("./pages/Settings.js").then((m) => ({ default: m.Settings })));
+const Profile = lazy(() => import("./pages/Profile.js").then((m) => ({ default: m.Profile })));
 const SharePage = lazy(() => import("./pages/SharePage.js").then((m) => ({ default: m.SharePage })));
 const Pricing = lazy(() => import("./pages/Pricing.js").then((m) => ({ default: m.Pricing })));
 const Team = lazy(() => import("./pages/Team.js").then((m) => ({ default: m.Team })));
@@ -58,14 +61,23 @@ export function App() {
         {/* Public, chrome-less canvas — embedded by the extension studio to record. */}
         <Route path="/whiteboard/embed" element={<Whiteboard />} />
 
+        {/* Protected, full-screen capture flow (no app shell). */}
+        <Route element={<ProtectedBare status={status} />}>
+          <Route path="/record" element={<Launcher />} />
+          <Route path="/record/live" element={<Recording />} />
+        </Route>
+
         {/* Protected */}
         <Route element={<Protected status={status} />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/whiteboard" element={<Whiteboard />} />
           <Route path="/team" element={<Team />} />
           <Route path="/recordings/:id" element={<RecordingView />} />
+          <Route path="/recordings/:id/edit" element={<RecordingView edit />} />
           <Route path="/screenshots/:id" element={<ScreenshotView />} />
+          <Route path="/screenshots/:id/edit" element={<ScreenshotView edit />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -91,6 +103,13 @@ function Protected({ status }: { status: Status }) {
       <Outlet />
     </AppLayout>
   );
+}
+
+/** Auth gate for full-screen flows that render without the app shell. */
+function ProtectedBare({ status }: { status: Status }) {
+  if (status === "loading") return <FullScreenSpinner />;
+  if (status === "guest") return <Navigate to="/login" replace />;
+  return <Outlet />;
 }
 
 /** Redirect already-authenticated users away from login/register. */

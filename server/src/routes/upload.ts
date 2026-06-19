@@ -28,6 +28,7 @@ import { initiateResumableUpload } from "../services/drive-service.js";
 import { getUploadGrant } from "../services/dropbox-service.js";
 import { createSignedUpload } from "../services/supabase-storage.js";
 import { setMediaVisibility } from "../services/media-service.js";
+import { requireHostedStorage } from "../services/entitlement-gates.js";
 import { toRecordingDTO, toScreenshotDTO } from "../lib/dto.js";
 
 export const uploadRouter: Router = Router();
@@ -92,7 +93,10 @@ uploadRouter.post(
   validate(initiateServerUploadSchema),
   asyncHandler(async (req, res) => {
     const userId = getUserId(req);
-    const { fileName, resourceType } = req.body as InitiateServerUploadInput;
+    const { fileName, resourceType, purpose } = req.body as InitiateServerUploadInput;
+    // Recio Cloud is a Premium destination for the user's own captures. System
+    // thumbnails (posters for media stored in THEIR cloud) are always allowed.
+    if (purpose !== "thumbnail") await requireHostedStorage(userId);
     const key = objectKey(userId, resourceType, fileName);
     const signed = await createSignedUpload(key);
     const result: InitiateServerUploadResult = {

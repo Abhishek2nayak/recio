@@ -1,8 +1,10 @@
 /**
- * Loom-style floating control bar shown while recording: live timer, pause/resume,
- * restart, stop, and cancel. Vertical pill, dark, draggable-feeling. Used in the
- * studio; the on-page content-script bar mirrors this design in vanilla DOM.
+ * Floating control rail shown while recording — the Vyooom HUD: near-black glass
+ * pill, blinking live dot, mono timer, a live-green Stop, then pause/resume,
+ * restart, discard. Used in the studio; the on-page content-script bar mirrors
+ * this design in vanilla DOM.
  */
+import type { CSSProperties } from "react";
 import { formatDuration } from "@flowcap/shared";
 
 export function RecordingToolbar({
@@ -22,32 +24,66 @@ export function RecordingToolbar({
   onRestart?: () => void;
   onCancel?: () => void;
 }) {
+  const recording = state === "recording";
   return (
-    <div className="flex flex-col items-center gap-1 rounded-full border border-border bg-[#0f0f11]/95 p-2 shadow-2xl backdrop-blur">
-      {/* Stop */}
-      <button
-        onClick={onStop}
-        title="Stop & save"
-        className="flex h-11 w-11 items-center justify-center rounded-full bg-danger text-white transition-transform hover:scale-105"
-      >
-        <span className="h-3.5 w-3.5 rounded-[3px] bg-white" />
-      </button>
-
-      {/* Timer */}
-      <div className="my-1 flex flex-col items-center">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 8,
+        padding: 10,
+        width: 68,
+        borderRadius: "var(--r-xl)",
+        background: "color-mix(in oklch, var(--hud) 88%, transparent)",
+        backdropFilter: "blur(20px) saturate(160%)",
+        border: "1px solid var(--hud-line)",
+        boxShadow: "var(--e-hud)",
+      }}
+    >
+      {/* live dot + timer */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "4px 0 6px" }}>
         <span
-          className={
-            "h-2 w-2 rounded-full " + (state === "recording" ? "animate-pulse bg-danger" : "bg-warning")
-          }
+          style={{
+            width: 9,
+            height: 9,
+            borderRadius: 99,
+            background: recording ? "var(--live)" : "var(--hud-ink-2)",
+            boxShadow: recording ? "0 0 10px var(--live)" : "none",
+            animation: recording ? "r-live-blink 1.4s steps(1) infinite" : "none",
+          }}
         />
-        <span className="mt-1 font-mono text-[11px] tabular-nums text-text-primary">
+        <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: "var(--hud-ink)" }}>
           {formatDuration(elapsedMs / 1000)}
         </span>
       </div>
 
+      {/* Stop */}
+      <button
+        onClick={onStop}
+        title="Stop & save"
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: "50%",
+          border: "none",
+          cursor: "pointer",
+          background: "var(--live)",
+          color: "oklch(0.2 0.02 262)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "transform var(--t1, 120ms)",
+        }}
+      >
+        <span style={{ width: 14, height: 14, borderRadius: 4, background: "currentColor" }} />
+      </button>
+
+      <span style={{ height: 1, width: 34, background: "var(--hud-line)" }} />
+
       {/* Pause / Resume */}
-      <Control title={state === "recording" ? "Pause" : "Resume"} onClick={state === "recording" ? onPause : onResume}>
-        {state === "recording" ? (
+      <Control title={recording ? "Pause" : "Resume"} onClick={recording ? onPause : onResume}>
+        {recording ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <rect x="6" y="5" width="4" height="14" rx="1" />
             <rect x="14" y="5" width="4" height="14" rx="1" />
@@ -69,7 +105,7 @@ export function RecordingToolbar({
       )}
 
       {onCancel && (
-        <Control title="Cancel" danger onClick={onCancel}>
+        <Control title="Discard" onClick={onCancel}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
           </svg>
@@ -79,25 +115,33 @@ export function RecordingToolbar({
   );
 }
 
-function Control({
-  title,
-  onClick,
-  danger,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  danger?: boolean;
-  children: React.ReactNode;
-}) {
+function Control({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+  const style: CSSProperties = {
+    width: 42,
+    height: 42,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "var(--r-sm)",
+    border: "none",
+    background: "rgba(255,255,255,.07)",
+    color: "var(--hud-ink-2)",
+    cursor: "pointer",
+    transition: "background 120ms, color 120ms",
+  };
   return (
     <button
       title={title}
       onClick={onClick}
-      className={
-        "flex h-9 w-9 items-center justify-center rounded-full transition-colors " +
-        (danger ? "text-muted hover:bg-danger/15 hover:text-danger" : "text-muted hover:bg-card hover:text-text-primary")
-      }
+      style={style}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,.12)";
+        e.currentTarget.style.color = "var(--hud-ink)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,.07)";
+        e.currentTarget.style.color = "var(--hud-ink-2)";
+      }}
     >
       {children}
     </button>

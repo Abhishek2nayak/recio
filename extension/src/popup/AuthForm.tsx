@@ -1,9 +1,22 @@
-/** Email/password + Google sign-in / registration for the popup. */
-import { useState } from "react";
+/** Email/password + Google sign-in / registration for the popup (Vyooom system). */
+import { useState, type CSSProperties } from "react";
 import { ApiError, api } from "../lib/api.js";
 import { sendMessage } from "../lib/messages.js";
 import { getSession, setSession, type Session } from "../lib/storage.js";
-import { Button, Field, Spinner, TextInput } from "../components/ui.js";
+import { Logo, RButton } from "../components/recio/index.js";
+
+const inputStyle: CSSProperties = {
+  width: "100%",
+  height: 38,
+  borderRadius: "var(--r)",
+  border: "1px solid var(--line-2)",
+  background: "var(--surface)",
+  padding: "0 12px",
+  fontSize: 13.5,
+  color: "var(--ink)",
+  outline: "none",
+  fontFamily: "var(--sans)",
+};
 
 export function AuthForm({ onAuthed }: { onAuthed: (session: Session) => void }) {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -18,8 +31,6 @@ export function AuthForm({ onAuthed }: { onAuthed: (session: Session) => void })
     setGoogleLoading(true);
     setError(null);
     try {
-      // The flow runs in the service worker (the popup may close when Google's
-      // window opens); if we're still here when it finishes, pick up the session.
       const res = await sendMessage({ type: "SIGN_IN_GOOGLE" });
       if (!res.ok) throw new Error(res.error);
       const session = await getSession();
@@ -51,52 +62,60 @@ export function AuthForm({ onAuthed }: { onAuthed: (session: Session) => void })
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3 p-4">
-      <div>
-        <h1 className="text-base font-semibold">{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-        <p className="text-xs text-muted">Record and save to your own cloud.</p>
+    <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 14, padding: 20 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Logo size={24} />
+        <div>
+          <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>
+            {mode === "login" ? "Welcome back" : "Create your account"}
+          </h1>
+          <p style={{ margin: "3px 0 0", fontSize: 13, color: "var(--ink-3)" }}>Record and save to your own cloud.</p>
+        </div>
       </div>
 
       {mode === "register" && (
-        <Field label="Name">
-          <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" />
-        </Field>
+        <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
+          <span style={{ color: "var(--ink-3)", fontWeight: 600 }}>Name</span>
+          <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" />
+        </label>
       )}
-      <Field label="Email">
-        <TextInput type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-      </Field>
-      <Field label="Password">
-        <TextInput
+      <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
+        <span style={{ color: "var(--ink-3)", fontWeight: 600 }}>Email</span>
+        <input style={inputStyle} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+      </label>
+      <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
+        <span style={{ color: "var(--ink-3)", fontWeight: 600 }}>Password</span>
+        <input
+          style={inputStyle}
           type="password"
           required
           minLength={mode === "register" ? 8 : undefined}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-      </Field>
+      </label>
 
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p style={{ margin: 0, fontSize: 12, color: "var(--danger)" }}>{error}</p>}
 
-      <Button type="submit" disabled={loading || googleLoading}>
-        {loading ? <Spinner /> : mode === "login" ? "Sign in" : "Create account"}
-      </Button>
+      <RButton type="submit" variant="primary" full disabled={loading || googleLoading}>
+        {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
+      </RButton>
 
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted">
-        <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-4)" }}>
+        <span style={{ height: 1, flex: 1, background: "var(--line)" }} /> or <span style={{ height: 1, flex: 1, background: "var(--line)" }} />
       </div>
 
-      <Button type="button" variant="secondary" onClick={google} disabled={googleLoading || loading}>
-        {googleLoading ? <Spinner /> : <GoogleGlyph />}
-        Continue with Google
-      </Button>
+      <RButton type="button" variant="outline" full onClick={google} disabled={googleLoading || loading}>
+        <GoogleGlyph /> Continue with Google
+      </RButton>
 
       <button
         type="button"
-        className="text-xs text-muted hover:text-text-primary"
         onClick={() => {
           setMode(mode === "login" ? "register" : "login");
           setError(null);
         }}
+        style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12.5, color: "var(--ink-3)" }}
       >
         {mode === "login" ? "Need an account? Register" : "Have an account? Sign in"}
       </button>

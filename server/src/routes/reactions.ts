@@ -8,7 +8,7 @@
  * (resourceId, emoji); the apiLimiter guards against spam.
  */
 import { Router } from "express";
-import { ok, reactSchema, type ReactInput, type ReactionCounts } from "@flowcap/shared";
+import { ok, reactSchema, type ReactInput, type ReactionCounts, type TimedReaction } from "@flowcap/shared";
 import { prisma } from "../lib/prisma.js";
 import { asyncHandler } from "../middleware/error.js";
 import { validate } from "../middleware/validate.js";
@@ -26,10 +26,24 @@ async function countsFor(resourceId: string): Promise<ReactionCounts> {
   return map;
 }
 
+/** Cap the timeline payload — plenty for rendering bursts, bounded for virality. */
+const TIMELINE_LIMIT = 500;
+
+async function timelineFor(resourceId: string): Promise<TimedReaction[]> {
+  return prisma.reactionEvent.findMany({
+    where: { resourceId },
+    orderBy: { createdAt: "desc" },
+    take: TIMELINE_LIMIT,
+    select: { emoji: true, timestampSec: true },
+  });
+}
+
 reactionsRouter.get(
   "/:resourceId",
   asyncHandler(async (req, res) => {
-    res.json(ok({ counts: await countsFor(param(req, "resourceId")) }));
+    const resourceId = param(req, "resourceId");
+    const [counts, timeline] = await Promise.all([countsFor(resourceId), timelineFor(resourceId)]);
+    res.json(ok({ counts, timeline }));
   }),
 );
 
@@ -37,12 +51,17 @@ reactionsRouter.post(
   "/",
   validate(reactSchema),
   asyncHandler(async (req, res) => {
-    const { resourceType, resourceId, emoji } = req.body as ReactInput;
+    const { resourceType, resourceId, emoji, timestampSec } = req.body as ReactInput;
     await prisma.reaction.upsert({
       where: { resourceId_emoji: { resourceId, emoji } },
       create: { resourceType, resourceId, emoji, count: 1 },
       update: { count: { increment: 1 } },
     });
-    res.json(ok({ counts: await countsFor(resourceId) }));
+    // Anchored to a moment in the video → also log the timeline event (bursts).
+    if (timestampSec !== undefined) {
+      await prisma.reactionEvent.create({ data: { resourceType, resourceId, emoji, timestampSec } });
+    }
+    const [counts, timeline] = await Promise.all([countsFor(resourceId), timelineFor(resourceId)]);
+    res.json(ok({ counts, timeline }));
   }),
 );

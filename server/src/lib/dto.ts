@@ -13,7 +13,18 @@ import {
   type StorageConnectionDTO,
   type UserDTO,
 } from "@flowcap/shared";
+import { env } from "../config/env.js";
 import { resolveEntitlements } from "./entitlements.js";
+
+/**
+ * The thumbnail column stores either an absolute URL or a Recio-storage object key
+ * (set by the extension's thumbnail capture). Keys are exposed through our public
+ * redirect endpoint so share-link previews (og:image) get a stable URL.
+ */
+export function publicThumbnailUrl(stored: string | null, shareToken: string): string | null {
+  if (!stored) return null;
+  return stored.startsWith("http") ? stored : `${env.API_PUBLIC_URL}/share/${shareToken}/thumb`;
+}
 
 export function toUserDTO(u: User): UserDTO {
   return {
@@ -50,11 +61,13 @@ export function toRecordingDTO(r: Recording): RecordingDTO {
     mimeType: r.mimeType as RecordingDTO["mimeType"],
     storageProvider: r.storageProvider,
     storageFileId: r.storageFileId,
-    thumbnailUrl: r.thumbnailUrl,
+    uploadStatus: r.uploadStatus === "UPLOADING" ? "UPLOADING" : "READY",
+    thumbnailUrl: publicThumbnailUrl(r.thumbnailUrl, r.shareToken),
     workspaceId: r.workspaceId,
     trimStartSec: r.trimStartSec,
     trimEndSec: r.trimEndSec,
     cuts: (r.cuts as unknown as RecordingDTO["cuts"]) ?? null,
+    overlays: (r.overlays as unknown as RecordingDTO["overlays"]) ?? null,
     shareToken: r.shareToken,
     isPublic: r.isPublic,
     visibility: r.isPublic ? LinkVisibility.PUBLIC : LinkVisibility.PRIVATE,

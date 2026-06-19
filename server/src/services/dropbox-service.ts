@@ -13,6 +13,7 @@ import { env } from "../config/env.js";
 import { decryptSecret } from "../lib/crypto.js";
 import { HttpError } from "../lib/http-error.js";
 import {
+  markConnectionBroken,
   requireConnection,
   updateDriveAccessToken,
   type OAuthTokens,
@@ -98,6 +99,15 @@ async function validAccessToken(conn: StorageConnection): Promise<string> {
       refresh_token: decryptSecret(conn.refreshToken),
     }),
   });
+  if (res.status === 400 || res.status === 401) {
+    // Refresh token revoked (app unlinked from dropbox.com) or invalid — flag the
+    // connection so clients show "reconnect" instead of failing generically.
+    await markConnectionBroken(conn.id);
+    throw new HttpError(
+      ErrorCode.STORAGE_RECONNECT_REQUIRED,
+      "Dropbox access was revoked or expired. Reconnect Dropbox in Settings to keep recording and playing your videos.",
+    );
+  }
   if (!res.ok) throw new HttpError(ErrorCode.DRIVE_AUTH_FAILED, "Dropbox token refresh failed.");
   const t = (await res.json()) as { access_token: string; expires_in?: number };
   const expiresAt = t.expires_in ? new Date(Date.now() + t.expires_in * 1000) : null;

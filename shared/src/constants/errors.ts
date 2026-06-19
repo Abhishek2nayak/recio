@@ -23,6 +23,8 @@ export const ErrorCode = {
 
   // ── Storage / Drive ──
   STORAGE_NOT_CONNECTED: "STORAGE_NOT_CONNECTED",
+  STORAGE_RECONNECT_REQUIRED: "STORAGE_RECONNECT_REQUIRED",
+  STORAGE_ACCOUNT_MISMATCH: "STORAGE_ACCOUNT_MISMATCH",
   DRIVE_AUTH_FAILED: "DRIVE_AUTH_FAILED",
   DRIVE_API_ERROR: "DRIVE_API_ERROR",
   UPLOAD_FAILED: "UPLOAD_FAILED",
@@ -50,6 +52,10 @@ export const ErrorMessage: Record<ErrorCode, string> = {
   NOT_FOUND: "The requested resource was not found.",
   RESOURCE_GONE: "This resource is no longer available.",
   STORAGE_NOT_CONNECTED: "No storage provider is connected.",
+  STORAGE_RECONNECT_REQUIRED:
+    "Access to your storage was revoked or expired. Reconnect it in Settings.",
+  STORAGE_ACCOUNT_MISMATCH:
+    "This is a different account than the one connected. Disconnect the current account first.",
   DRIVE_AUTH_FAILED: "Could not authenticate with Google Drive.",
   DRIVE_API_ERROR: "Google Drive returned an error.",
   UPLOAD_FAILED: "The upload failed. Please try again.",
@@ -72,6 +78,8 @@ export const ErrorStatus: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   RESOURCE_GONE: 410,
   STORAGE_NOT_CONNECTED: 400,
+  STORAGE_RECONNECT_REQUIRED: 401,
+  STORAGE_ACCOUNT_MISMATCH: 409,
   DRIVE_AUTH_FAILED: 401,
   DRIVE_API_ERROR: 502,
   UPLOAD_FAILED: 500,

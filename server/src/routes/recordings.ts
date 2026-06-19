@@ -12,9 +12,11 @@ import {
   ok,
   ResourceType,
   createRecordingSchema,
+  finalizeRecordingSchema,
   listMediaQuerySchema,
   updateMediaSchema,
   type CreateRecordingInput,
+  type FinalizeRecordingInput,
   type ListMediaQuery,
   type Paginated,
   type RecordingDTO,
@@ -29,6 +31,7 @@ import { param } from "../lib/params.js";
 import { getPlaybackUrl } from "../services/storage-service.js";
 import {
   createRecording,
+  finalizeRecording,
   findOwnedRecording,
   findViewableRecording,
   listRecordings,
@@ -59,7 +62,10 @@ recordingsRouter.get(
     const items = await Promise.all(
       page.items.map(async (r) => ({
         ...toRecordingDTO(r),
-        previewUrl: await getPlaybackUrl(r.userId, r.storageProvider, r.storageFileId, r.id),
+        // Pending instant-link rows have no bytes yet — no preview to resolve.
+        previewUrl: r.storageFileId
+          ? await getPlaybackUrl(r.userId, r.storageProvider, r.storageFileId, r.id)
+          : null,
       })),
     );
     const body: Paginated<RecordingDTO> = { items, nextCursor: page.nextCursor };
@@ -81,13 +87,30 @@ recordingsRouter.get(
   asyncHandler(async (req, res) => {
     const recording = await findViewableRecording(getUserId(req), param(req, "id"));
     if (!recording) throw HttpError.notFound("Recording not found.");
-    const playbackUrl = await getPlaybackUrl(
-      recording.userId,
-      recording.storageProvider,
-      recording.storageFileId,
-      recording.id,
-    );
+    const playbackUrl = recording.storageFileId
+      ? await getPlaybackUrl(
+          recording.userId,
+          recording.storageProvider,
+          recording.storageFileId,
+          recording.id,
+        )
+      : null;
     res.json(ok({ recording: toRecordingDTO(recording), playbackUrl }));
+  }),
+);
+
+/**
+ * Instant-link flow, step 2: the bytes finished uploading — attach the storage file
+ * id (and optional final size / thumbnail) to the pending row and apply the storage
+ * ACL that share-creation could not apply while the file didn't exist yet.
+ */
+recordingsRouter.post(
+  "/:id/finalize",
+  validate(finalizeRecordingSchema),
+  asyncHandler(async (req, res) => {
+    const input = req.body as FinalizeRecordingInput;
+    const recording = await finalizeRecording(getUserId(req), param(req, "id"), input);
+    res.json(ok({ recording: toRecordingDTO(recording) }));
   }),
 );
 

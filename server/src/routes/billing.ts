@@ -52,7 +52,7 @@ export const billingWebhookHandler: RequestHandler = (req, res) => {
     .catch((err: unknown) => {
       const message = err instanceof Error ? err.message : "Webhook error";
       // eslint-disable-next-line no-console
-      console.error("[Recio] Stripe webhook error:", message);
+      console.error("[Vyooom] Stripe webhook error:", message);
       res.status(400).send(`Webhook error: ${message}`);
     });
 };

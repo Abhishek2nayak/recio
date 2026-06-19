@@ -25,6 +25,7 @@ function toDTO(t: {
   title: string | null;
   summary: string | null;
   text: string | null;
+  words?: unknown;
   error: string | null;
 }): TranscriptDTO {
   return {
@@ -33,6 +34,7 @@ function toDTO(t: {
     title: t.title,
     summary: t.summary,
     text: t.text,
+    words: (t.words as TranscriptDTO["words"]) ?? null,
     error: t.error,
   };
 }

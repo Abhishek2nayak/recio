@@ -99,7 +99,16 @@ storageRouter.get(
     }
 
     const tokens = await exchangeDriveCode(code);
-    await saveDriveConnection(userId, tokens);
+    try {
+      await saveDriveConnection(userId, tokens);
+    } catch (err) {
+      // Different Google account than the one already connected — explain on Settings.
+      if (err instanceof HttpError && err.code === ErrorCode.STORAGE_ACCOUNT_MISMATCH) {
+        res.redirect(`${settingsUrl}?drive=mismatch`);
+        return;
+      }
+      throw err;
+    }
     res.redirect(`${settingsUrl}?drive=connected`);
   }),
 );
@@ -150,7 +159,14 @@ storageRouter.get(
     } catch {
       return void res.redirect(`${settingsUrl}?dropbox=error`);
     }
-    await saveDropboxConnection(userId, await exchangeDropboxCode(code));
+    try {
+      await saveDropboxConnection(userId, await exchangeDropboxCode(code));
+    } catch (err) {
+      if (err instanceof HttpError && err.code === ErrorCode.STORAGE_ACCOUNT_MISMATCH) {
+        return void res.redirect(`${settingsUrl}?dropbox=mismatch`);
+      }
+      throw err;
+    }
     res.redirect(`${settingsUrl}?dropbox=connected`);
   }),
 );

@@ -84,7 +84,7 @@ async function startRecording(): Promise<void> {
     await closeOffscreen();
     const msg = err instanceof Error ? err.message : "Couldn't start recording.";
     // eslint-disable-next-line no-console
-    console.error("[Recio] startRecording failed:", err);
+    console.error("[Vyooom] startRecording failed:", err);
     chrome.tabs
       .sendMessage(tab.id, { type: "SHOW_TOAST", title: "Recording failed", error: msg } satisfies Message)
       .catch(() => {});
@@ -268,6 +268,17 @@ async function handleMessage(
     case "UPLOAD_STARTED":
       uploads.set(message.upload.id, message.upload);
       return { ok: true };
+    case "UPLOAD_LINK_READY": {
+      // Instant link: surface the share URL while the bytes are still uploading.
+      const u = uploads.get(message.id);
+      if (u) u.shareUrl = message.shareUrl;
+      // The studio shows the link in its own UI; for the no-tab offscreen recorder,
+      // toast it onto the page the user is looking at.
+      if (sender.url?.includes("/offscreen/")) {
+        void broadcastToast("Link ready — upload continuing in background", message.shareUrl);
+      }
+      return { ok: true };
+    }
     case "UPLOAD_PROGRESS": {
       const u = uploads.get(message.id);
       if (u) u.progress = message.progress;

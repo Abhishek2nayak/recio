@@ -44,6 +44,10 @@ export const initiateServerUploadSchema = z.object({
   mimeType: anyMediaMime,
   sizeBytes: z.number().int().positive().max(UPLOAD.MAX_FILE_BYTES),
   resourceType: z.nativeEnum(ResourceType),
+  /** "thumbnail" = system poster image accompanying media stored elsewhere — always
+   *  allowed. "media" (default) = the user's actual capture → requires the
+   *  `hostedStorage` entitlement (Recio Cloud is a Premium destination). */
+  purpose: z.enum(["media", "thumbnail"]).optional(),
 });
 export type InitiateServerUploadInput = z.infer<typeof initiateServerUploadSchema>;
 

@@ -1,4 +1,4 @@
-/** Small shared UI primitives for the extension surfaces, on the Recio palette. */
+/** Small shared UI primitives for the extension surfaces, on the Vyooom palette. */
 import { clsx } from "clsx";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { StorageProvider } from "@flowcap/shared";
@@ -60,17 +60,19 @@ export function ProgressBar({ value }: { value: number }) {
 
 export function StorageBadge({ provider }: { provider: StorageProvider }) {
 
+  // Ownership is the product: say WHOSE storage this is, not just the brand.
   function getStorageName(provider: StorageProvider) {
     switch (provider) {
       case "DRIVE":
-        return "Drive";
+        return "Your Google Drive";
       case "DROPBOX":
-        return "Dropbox";
+        return "Your Dropbox";
       default:
-        return "Recio";
+        return "Vyooom Cloud";
     }
   }
   const isDrive = provider === "DRIVE";
+  const icon = provider === "DRIVE" ? "/assets/drive.png" : provider === "DROPBOX" ? "/assets/dropbox.png" : null;
   return (
     <span
       className={clsx(
@@ -78,6 +80,7 @@ export function StorageBadge({ provider }: { provider: StorageProvider }) {
         isDrive ? "bg-accent/15 text-accent" : "bg-success/15 text-success",
       )}
     >
+      {icon && <img src={icon} alt="" style={{ width: 12, height: 12, objectFit: "contain" }} />}
       {getStorageName(provider)}
     </span>
   );

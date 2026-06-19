@@ -52,6 +52,8 @@ export type Message =
   | { type: "CONNECT_DROPBOX" }
   // capture pages → SW (upload registry)
   | { type: "UPLOAD_STARTED"; upload: UploadState }
+  // Instant link: the share URL exists while the bytes are still uploading.
+  | { type: "UPLOAD_LINK_READY"; id: string; mediaId: string; shareUrl: string }
   | { type: "UPLOAD_PROGRESS"; id: string; progress: number }
   | { type: "UPLOAD_DONE"; id: string; shareUrl: string | null }
   | { type: "UPLOAD_FAILED"; id: string; error: string }

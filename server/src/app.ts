@@ -25,6 +25,7 @@ import { brandingRouter } from "./routes/branding.js";
 import { billingRouter, billingWebhookHandler } from "./routes/billing.js";
 import { workspacesRouter } from "./routes/workspaces.js";
 import { usageRouter } from "./routes/usage.js";
+import { previewRouter } from "./routes/preview.js";
 
 export function createApp(): Express {
   const app = express();
@@ -60,6 +61,8 @@ export function createApp(): Express {
   app.use("/media", mediaRouter);
 
   app.use("/", apiLimiter);
+  // Canonical share links (/s/:token): OG tags for crawlers + redirect for humans.
+  app.use("/s", previewRouter);
   app.use("/auth", authRouter);
   app.use("/storage", storageRouter);
   app.use("/upload", uploadRouter);

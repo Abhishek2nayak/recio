@@ -13,6 +13,22 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+/** Profile edit (name only for now; email is the account key, avatar is initials). */
+export const updateProfileSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/**
+ * Change (or set) the account password. `currentPassword` is required when the
+ * account already has one; Google-only accounts may set a first password without it.
+ */
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().max(128).optional(),
+  newPassword: z.string().min(8).max(128),
+});
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
 /** "Sign in with Google" (web) — the app sends the Google ID token it received via GIS. */
 export const googleSignInSchema = z.object({
   idToken: z.string().min(1),

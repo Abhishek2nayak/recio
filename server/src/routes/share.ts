@@ -36,6 +36,7 @@ import {
   setMediaVisibility,
 } from "../services/media-service.js";
 import { getPlaybackUrl } from "../services/storage-service.js";
+import { createSignedDownloadUrl } from "../services/supabase-storage.js";
 import { canFeature } from "../lib/entitlements.js";
 import {
   buildShareUrl,
@@ -104,8 +105,13 @@ shareRouter.get(
       throw new HttpError(ErrorCode.RESOURCE_GONE, "This link is turned off.");
     }
 
-    await incrementViewCount(type, media.id);
-    const playbackUrl = await getPlaybackUrl(media.userId, media.storageProvider, media.storageFileId, media.id);
+    // Instant-link flow: the link exists but the bytes are still uploading. Serve
+    // the page in "processing" mode (the client polls); don't count these as views.
+    const processing = !media.storageFileId;
+    if (!processing) await incrementViewCount(type, media.id);
+    const playbackUrl = processing
+      ? ""
+      : await getPlaybackUrl(media.userId, media.storageProvider, media.storageFileId, media.id);
     const owner = await prisma.user.findUnique({
       where: { id: media.userId },
       select: { name: true, plan: true, brandName: true, brandLogoUrl: true, ctaLabel: true, ctaUrl: true },
@@ -127,6 +133,8 @@ shareRouter.get(
       title: media.title,
       mimeType: media.mimeType as PublicShareViewDTO["mimeType"],
       playbackUrl,
+      processing,
+      shareUrl: buildShareUrl(media.shareToken),
       duration: type === ResourceType.RECORDING ? (media as Recording).duration : null,
       trimStartSec: type === ResourceType.RECORDING ? (media as Recording).trimStartSec : null,
       trimEndSec: type === ResourceType.RECORDING ? (media as Recording).trimEndSec : null,
@@ -134,13 +142,54 @@ shareRouter.get(
         type === ResourceType.RECORDING
           ? ((media as Recording).cuts as unknown as PublicShareViewDTO["cuts"]) ?? null
           : null,
-      viewCount: media.viewCount + 1,
+      overlays:
+        type === ResourceType.RECORDING
+          ? ((media as Recording).overlays as unknown as PublicShareViewDTO["overlays"]) ?? null
+          : null,
+      viewCount: media.viewCount + (processing ? 0 : 1),
       ownerName: owner?.name ?? null,
       branding,
       createdAt: media.createdAt.toISOString(),
       permission: share?.permission ?? SharePermission.VIEW,
     };
     res.json(ok(view));
+  }),
+);
+
+// ── Captions for a public share (no auth) ──
+// Word-level transcript timestamps so the viewer can build a captions track. Only
+// served while the link is live, and only for recordings with a READY transcript.
+shareRouter.get(
+  "/:token/transcript",
+  asyncHandler(async (req, res) => {
+    const result = await findByShareToken(param(req, "token"));
+    if (!result || result.type !== ResourceType.RECORDING) throw HttpError.notFound("Not found.");
+    const share = await getShareByToken(param(req, "token"));
+    if (!result.media.isPublic || !isShareLive(share)) {
+      throw new HttpError(ErrorCode.RESOURCE_GONE, "This link is turned off.");
+    }
+    const t = await prisma.transcript.findUnique({ where: { recordingId: result.media.id } });
+    if (!t || t.status !== "READY") {
+      res.json(ok({ words: null, text: null }));
+      return;
+    }
+    res.json(ok({ words: (t.words as unknown as { word: string; start: number; end: number }[]) ?? null, text: t.text }));
+  }),
+);
+
+// ── Poster image for a public share (no auth) ──
+// Stable URL for link previews (og:image): redirects to a fresh signed download URL
+// for the stored thumbnail key, or to the absolute URL if one was stored.
+shareRouter.get(
+  "/:token/thumb",
+  asyncHandler(async (req, res) => {
+    const result = await findByShareToken(param(req, "token"));
+    if (!result?.media.isPublic || !result.media.thumbnailUrl) {
+      throw HttpError.notFound("No thumbnail.");
+    }
+    const stored = result.media.thumbnailUrl;
+    const url = stored.startsWith("http") ? stored : await createSignedDownloadUrl(stored);
+    res.redirect(302, url);
   }),
 );
 

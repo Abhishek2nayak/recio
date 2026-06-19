@@ -1,5 +1,5 @@
 /**
- * Typed wrapper over `chrome.storage.local`. Holds the Recio session (access
+ * Typed wrapper over `chrome.storage.local`. Holds the Vyooom session (access
  * token + user), the chosen upload destination, and a small recents list. The
  * access token lives here (not a cookie) because the extension calls the API
  * cross-origin from a service worker.
@@ -21,7 +21,13 @@ export interface RecentItem {
 }
 
 export type CameraCorner = "bottom-left" | "bottom-right" | "top-left" | "top-right";
+export type CameraSize = "small" | "medium" | "large";
 export type RecordingQuality = "high" | "standard" | "saver";
+/** Light/dark mode. "system" follows the OS (the default). */
+export type ThemeMode = "light" | "dark" | "system";
+
+/** On-page webcam bubble diameter (px) per size preset. */
+export const CAMERA_SIZE_PX: Record<CameraSize, number> = { small: 120, medium: 160, large: 220 };
 
 /** Maps a quality preset to MediaRecorder bitrate + capture frame rate. */
 export const QUALITY_PRESETS: Record<RecordingQuality, { videoBitsPerSecond: number; frameRate: number; label: string }> = {
@@ -39,6 +45,8 @@ export interface Settings {
   microphone: boolean;
   /** Where the webcam bubble sits in the recording. */
   cameraCorner: CameraCorner;
+  /** Webcam bubble diameter preset. */
+  cameraSize: CameraSize;
   /** Recording quality preset (bitrate + frame rate). */
   quality: RecordingQuality;
   /** Chosen input devices (empty = system default). */
@@ -46,6 +54,8 @@ export interface Settings {
   cameraDeviceId: string;
   /** Show a 3-2-1 countdown before recording starts. */
   countdown: boolean;
+  /** Light/dark appearance for the extension surfaces. */
+  theme: ThemeMode;
 }
 
 interface StoreShape {
@@ -61,10 +71,12 @@ const DEFAULTS: StoreShape = {
     camera: false,
     microphone: true,
     cameraCorner: "bottom-left",
+    cameraSize: "medium",
     quality: "standard",
     micDeviceId: "",
     cameraDeviceId: "",
     countdown: true,
+    theme: "system",
   },
   recents: [],
 };

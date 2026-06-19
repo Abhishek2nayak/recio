@@ -2,26 +2,160 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens as CSS variables (mirrors @flowcap/shared `rootCss()`), so raw CSS
-   and Tailwind arbitrary values read from one source. Light-mode. */
+/* ============================================================
+   Vyooom — design tokens (mirror of @flowcap/shared design system).
+   Cool light-first neutrals + a single electric accent (Pulse green)
+   + near-black recording HUD. Shared with the web app.
+   ============================================================ */
 :root {
-  --bg-primary: #f5f5f7;
-  --bg-secondary: #ffffff;
-  --bg-card: #ffffff;
-  --border: #e5e5ea;
-  --text-primary: #1d1d1f;
-  --text-muted: #6e6e73;
-  --accent: #1a1a1a;
-  --accent-hover: #000000;
-  --highlight: #ccff00;
-  --highlight-hover: #bbee00;
-  --success: #16a34a;
-  --danger: #dc2626;
-  --warning: #d97706;
-  --font-sans: "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* cool neutral surfaces */
+  --paper: oklch(0.984 0.003 255);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.972 0.004 255);
+  --surface-3: oklch(0.955 0.005 255);
+  --line: oklch(0.918 0.005 258);
+  --line-2: oklch(0.872 0.006 258);
+
+  /* ink (text) */
+  --ink: oklch(0.235 0.013 262);
+  --ink-2: oklch(0.455 0.011 262);
+  --ink-3: oklch(0.612 0.009 262);
+  --ink-4: oklch(0.722 0.007 262);
+
+  /* near-black recording HUD glass */
+  --hud: oklch(0.205 0.011 262);
+  --hud-2: oklch(0.262 0.012 262);
+  --hud-line: oklch(0.36 0.012 262);
+  --hud-ink: oklch(0.96 0.004 255);
+  --hud-ink-2: oklch(0.74 0.008 258);
+
+  /* accent — Vyooom brand blue (default); Pulse/Ink are opt-in via [data-theme] */
+  --accent: oklch(0.55 0.2 258);
+  --accent-2: oklch(0.49 0.21 258);
+  --accent-on: oklch(0.99 0.01 258); /* fg on SOLID accent (buttons/badges) */
+  --accent-ink: oklch(0.5 0.19 258); /* accent-colored fg on neutral/soft surfaces */
+  --accent-soft: oklch(0.95 0.035 258);
+  --accent-ring: oklch(0.55 0.2 258 / 0.35);
+  --live: oklch(0.58 0.21 258);
+
+  --success: oklch(0.7 0.16 150);
+  --danger: oklch(0.6 0.2 25);
+  --warning: oklch(0.72 0.16 70);
+
+  /* radius */
+  --r-sm: 7px;
+  --r: 11px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+
+  /* elevation */
+  --e1: 0 1px 2px rgba(18, 20, 28, 0.05), 0 1px 1px rgba(18, 20, 28, 0.04);
+  --e2: 0 6px 16px -4px rgba(18, 20, 28, 0.1), 0 2px 5px -2px rgba(18, 20, 28, 0.06);
+  --e-hud: 0 24px 60px -12px rgba(0, 0, 0, 0.55), 0 6px 18px -6px rgba(0, 0, 0, 0.4),
+    0 0 0 0.5px rgba(255, 255, 255, 0.06) inset;
+
+  /* type */
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
+  /* legacy aliases (kept for any raw var() consumers) */
+  --bg-primary: var(--paper);
+  --bg-secondary: var(--surface);
+  --bg-card: var(--surface);
+  --border: var(--line);
+  --text-primary: var(--ink);
+  --text-muted: var(--ink-2);
+  --accent-hover: oklch(0.15 0.01 262);
+  --highlight: var(--accent);
+  --highlight-hover: var(--accent-2);
+
   color-scheme: light;
+}
+
+/* ---------- THEME: Pulse (electric green) ---------- */
+[data-theme="pulse"] {
+  --accent: oklch(0.77 0.175 150);
+  --accent-2: oklch(0.70 0.175 150);
+  --accent-on: oklch(0.22 0.05 150); /* dark green — white fails on green */
+  --accent-ink: oklch(0.22 0.05 150);
+  --accent-soft: oklch(0.95 0.045 150);
+  --accent-ring: oklch(0.77 0.175 150 / 0.35);
+  --live: oklch(0.77 0.175 150);
+}
+/* ---------- THEME: Ink (monochrome) ---------- */
+[data-theme="ink"] {
+  --accent: oklch(0.30 0.012 262);
+  --accent-2: oklch(0.22 0.012 262);
+  --accent-on: oklch(0.98 0.003 255);
+  --accent-ink: oklch(0.30 0.012 262);
+  --accent-soft: oklch(0.93 0.004 258);
+  --accent-ring: oklch(0.30 0.012 262 / 0.28);
+  --live: oklch(0.76 0.18 150);
+}
+
+/* ============================================================
+   DARK MODE — the extension surfaces (popup/studio/toolbar).
+   By default they follow the OS; the popup toggle can force a mode by
+   setting `.dark` / `.light` on <html> (see lib/theme.ts). The dark
+   palette is shared by both the forced (`:root.dark`) and the
+   system-default (`@media … :root:not(.light)`) cases. The near-black
+   HUD glass is reused as-is.
+   ============================================================ */
+:root.dark {
+  --paper: oklch(0.17 0.008 262);
+  --surface: oklch(0.205 0.011 262);
+  --surface-2: oklch(0.245 0.012 262);
+  --surface-3: oklch(0.285 0.013 262);
+  --line: oklch(0.32 0.013 262);
+  --line-2: oklch(0.4 0.014 262);
+
+  --ink: oklch(0.96 0.004 255);
+  --ink-2: oklch(0.74 0.008 258);
+  --ink-3: oklch(0.61 0.01 260);
+  --ink-4: oklch(0.5 0.011 260);
+
+  --accent: oklch(0.62 0.19 258);
+  --accent-2: oklch(0.56 0.2 258);
+  --accent-on: oklch(0.99 0.01 258);
+  --accent-ink: oklch(0.74 0.15 256);
+  --accent-soft: oklch(0.3 0.07 262);
+  --accent-ring: oklch(0.62 0.19 258 / 0.45);
+  --live: oklch(0.64 0.2 258);
+
+  --e1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --e2: 0 6px 16px -4px rgba(0, 0, 0, 0.5), 0 2px 5px -2px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --paper: oklch(0.17 0.008 262);
+    --surface: oklch(0.205 0.011 262);
+    --surface-2: oklch(0.245 0.012 262);
+    --surface-3: oklch(0.285 0.013 262);
+    --line: oklch(0.32 0.013 262);
+    --line-2: oklch(0.4 0.014 262);
+
+    --ink: oklch(0.96 0.004 255);
+    --ink-2: oklch(0.74 0.008 258);
+    --ink-3: oklch(0.61 0.01 260);
+    --ink-4: oklch(0.5 0.011 260);
+
+    --accent: oklch(0.62 0.19 258);
+    --accent-2: oklch(0.56 0.2 258);
+    --accent-on: oklch(0.99 0.01 258);
+    --accent-ink: oklch(0.74 0.15 256);
+    --accent-soft: oklch(0.3 0.07 262);
+    --accent-ring: oklch(0.62 0.19 258 / 0.45);
+    --live: oklch(0.64 0.2 258);
+
+    --e1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
+    --e2: 0 6px 16px -4px rgba(0, 0, 0, 0.5), 0 2px 5px -2px rgba(0, 0, 0, 0.4);
+
+    color-scheme: dark;
+  }
 }
 
 * {
@@ -31,21 +165,70 @@
 html,
 body {
   margin: 0;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Thin, dark scrollbars to match the surface. */
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+/* Thin scrollbars to match the surface. */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--line-2);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+@keyframes r-live-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes r-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-ring);
+  }
+  70% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes r-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes r-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes r-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

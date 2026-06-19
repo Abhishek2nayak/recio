@@ -3,9 +3,10 @@ import { useParams } from "react-router-dom";
 import type { RecordingDTO } from "@flowcap/shared";
 import { ApiError, api } from "../lib/api.js";
 import { MediaDetail } from "../components/MediaDetail.js";
+import { MediaView } from "../components/MediaView.js";
 import { DetailError, DetailSkeleton } from "../components/DetailStates.js";
 
-export function RecordingView() {
+export function RecordingView({ edit = false }: { edit?: boolean }) {
   const { id = "" } = useParams();
   const [recording, setRecording] = useState<RecordingDTO | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState("");
@@ -20,7 +21,7 @@ export function RecordingView() {
       .then((d) => {
         if (cancelled) return;
         setRecording(d.recording);
-        setPlaybackUrl(d.playbackUrl);
+        setPlaybackUrl(d.playbackUrl ?? "");
       })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "Couldn't load this recording."),
@@ -34,14 +35,18 @@ export function RecordingView() {
   if (loading) return <DetailSkeleton />;
   if (error || !recording) return <DetailError message={error ?? "Not found."} />;
 
+  const rename = async (title: string) => {
+    const { recording: updated } = await api.updateRecording(id, { title });
+    setRecording(updated);
+  };
+
+  if (!edit) return <MediaView media={recording} playbackUrl={playbackUrl} onRename={rename} />;
+
   return (
     <MediaDetail
       media={recording}
       playbackUrl={playbackUrl}
-      onRename={async (title) => {
-        const { recording: updated } = await api.updateRecording(id, { title });
-        setRecording(updated);
-      }}
+      onRename={rename}
       onDelete={() => api.deleteRecording(id).then(() => undefined)}
     />
   );

@@ -1,4 +1,4 @@
-/** Shared UI primitives on the Recio palette (web). */
+/** Shared UI primitives on the Vyooom palette (web). */
 import { clsx } from "clsx";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { StorageProvider } from "@flowcap/shared";
@@ -10,7 +10,7 @@ const VARIANTS: Record<Variant, string> = {
   // Ink button: near-black with white text — the default primary action.
   primary: "bg-accent hover:bg-accent-hover text-white shadow-sm",
   // Electric-kiwi pop, reserved for the headline brand action; black foreground only.
-  highlight: "bg-highlight hover:bg-highlight-hover text-[#0A0A0A] font-semibold shadow-sm",
+  highlight: "bg-highlight hover:bg-highlight-hover text-accent-on font-semibold shadow-sm",
   secondary: "bg-card border border-border hover:border-muted text-text-primary shadow-sm",
   ghost: "bg-transparent hover:bg-card text-muted hover:text-text-primary",
   danger: "bg-danger/10 border border-danger/30 text-danger hover:bg-danger/20",
@@ -69,10 +69,11 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
-const BADGE: Record<StorageProvider, { label: string; tone: string; dot: string }> = {
-  DRIVE: { label: "Drive", tone: "bg-accent/15 text-accent", dot: "bg-accent" },
-  DROPBOX: { label: "Dropbox", tone: "bg-[#0061FF]/15 text-[#4c8dff]", dot: "bg-[#0061FF]" },
-  FLOWCAP: { label: "Recio", tone: "bg-success/15 text-success", dot: "bg-success" },
+// Ownership is the product: say WHOSE storage this is, not just the brand.
+const BADGE: Record<StorageProvider, { label: string; tone: string; dot: string; icon: string | null }> = {
+  DRIVE: { label: "Your Google Drive", tone: "bg-accent/15 text-accent", dot: "bg-accent", icon: "/assets/drive.png" },
+  DROPBOX: { label: "Your Dropbox", tone: "bg-[#0061FF]/15 text-[#4c8dff]", dot: "bg-[#0061FF]", icon: "/assets/dropbox.png" },
+  FLOWCAP: { label: "Vyooom Cloud", tone: "bg-success/15 text-success", dot: "bg-success", icon: null },
 };
 
 export function StorageBadge({ provider, className }: { provider: StorageProvider; className?: string }) {
@@ -85,7 +86,11 @@ export function StorageBadge({ provider, className }: { provider: StorageProvide
         className,
       )}
     >
-      <span className={clsx("h-1.5 w-1.5 rounded-full", b.dot)} />
+      {b.icon ? (
+        <img src={b.icon} alt="" className="h-3 w-3 object-contain" />
+      ) : (
+        <span className={clsx("h-1.5 w-1.5 rounded-full", b.dot)} />
+      )}
       {b.label}
     </span>
   );

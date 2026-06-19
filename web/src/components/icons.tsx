@@ -115,13 +115,25 @@ export const PlayIcon = (p: P) => (
     <path d="m6 4 14 8-14 8V4z" />
   </svg>
 );
-/** Recio brand mark — a teal→blue orbit swirl with a centre dot. */
-export const Logo = ({ width = 26, height = 26, ...p }: P) => (
-  <svg width={width} height={height} viewBox="0 0 48 48" fill="none" {...p}>
-    <g stroke="currentColor" strokeWidth="5.5" strokeLinecap="round" fill="none">
-      <path d="M31 9.5a16 16 0 0 0-17 28" />
-      <path d="M17 38.5a16 16 0 0 0 17-28" />
-    </g>
-    <circle cx="24" cy="24" r="5" fill="currentColor" />
-  </svg>
+/** Vyooom brand mark — the blue play/motion glyph (web/public/assets). Full
+ *  colour, so it reads on light and dark without recolouring. */
+export const Logo = ({
+  width = 26,
+  height = 26,
+  style,
+  className,
+}: {
+  width?: number;
+  height?: number;
+  style?: import("react").CSSProperties;
+  className?: string;
+}) => (
+  <img
+    src="/assets/vyoom-icon.png"
+    alt="Vyooom"
+    width={width}
+    height={height}
+    className={className}
+    style={{ display: "inline-block", verticalAlign: "middle", borderRadius: "24%", ...style }}
+  />
 );

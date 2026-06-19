@@ -58,7 +58,7 @@ const TIERS: Tier[] = [
       "Full engagement analytics",
       "Folders to organize your library",
       "300 AI transcript minutes / mo",
-      "Optional Recio-hosted storage",
+      "Optional Vyooom-hosted storage",
     ],
   },
   {
@@ -130,7 +130,7 @@ export function Pricing() {
         <div className="mt-6 inline-flex items-center gap-1 rounded-full border border-border bg-card p-1 shadow-sm">
           <PeriodButton active={!annual} onClick={() => setAnnual(false)}>Monthly</PeriodButton>
           <PeriodButton active={annual} onClick={() => setAnnual(true)}>
-            Annual <span className="ml-1 rounded-full bg-highlight px-1.5 py-0.5 text-[10px] font-semibold text-[#0A0A0A]">save ~17%</span>
+            Annual <span className="ml-1 rounded-full bg-highlight px-1.5 py-0.5 text-[10px] font-semibold text-accent-on">save ~17%</span>
           </PeriodButton>
         </div>
       </header>
@@ -154,7 +154,7 @@ export function Pricing() {
               )}
             >
               {tier.highlighted && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-highlight px-3 py-0.5 text-xs font-semibold text-[#0A0A0A]">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-highlight px-3 py-0.5 text-xs font-semibold text-accent-on">
                   Most popular
                 </span>
               )}
@@ -175,7 +175,7 @@ export function Pricing() {
                 {tier.features.map((f, i) => (
                   <li key={f} className={clsx("flex gap-2 text-sm", i === 0 && tier.plan !== Plan.FREE ? "font-medium text-text-primary" : "text-text-primary")}>
                     {!(i === 0 && tier.plan !== Plan.FREE) && (
-                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-highlight text-[#0A0A0A]">
+                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-highlight text-accent-on">
                         <CheckIcon width={11} height={11} />
                       </span>
                     )}

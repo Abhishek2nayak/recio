@@ -21,12 +21,15 @@ export function useViewTracker(
   resourceType: ResourceType,
   resourceId: string,
   videoRef?: RefObject<HTMLVideoElement | null>,
+  /** Pass false while the media isn't watchable yet (e.g. still uploading). */
+  enabled = true,
 ): void {
   const sessionRef = useRef(crypto.randomUUID());
   const maxPct = useRef(0);
   const sentPct = useRef(0);
 
   useEffect(() => {
+    if (!enabled) return;
     const session = sessionRef.current;
     const viewerId = getViewerId();
     const send = (pct: number) =>
@@ -64,5 +67,5 @@ export function useViewTracker(
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [resourceType, resourceId, videoRef]);
+  }, [resourceType, resourceId, videoRef, enabled]);
 }

@@ -39,20 +39,20 @@ export function UpgradeModal() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-6 shadow-xl focus:outline-none">
-          <span className="inline-flex items-center rounded-full bg-highlight px-2 py-0.5 text-xs font-semibold text-[#0A0A0A]">
-            Recio Pro
+          <span className="inline-flex items-center rounded-full bg-highlight px-2 py-0.5 text-xs font-semibold text-accent-on">
+            Vyooom Pro
           </span>
           <Dialog.Title className="mt-3 text-lg font-semibold">
             Upgrade to unlock this
           </Dialog.Title>
           <Dialog.Description className="mt-1.5 text-sm text-muted">
-            {message ?? "This feature is part of Recio Pro."}
+            {message ?? "This feature is part of Vyooom Pro."}
           </Dialog.Description>
 
           <ul className="mt-4 space-y-2">
             {PRO_PERKS.map((p) => (
               <li key={p} className="flex items-center gap-2 text-sm text-text-primary">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-highlight text-[#0A0A0A]">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-highlight text-accent-on">
                   <CheckGlyph />
                 </span>
                 {p}

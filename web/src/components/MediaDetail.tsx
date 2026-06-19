@@ -1,34 +1,41 @@
 /**
- * Loom-style media detail page for recordings + screenshots: large player, prominent
- * inline-editable title, owner + meta row, an emoji reactions bar, and a right rail
- * with the Share panel (server-side Drive permission toggle), a Transcript placeholder,
- * and delete. The page wrappers only handle fetching + the type-specific API calls.
+ * Edit screen (recording / screenshot) — full-screen editor:
+ *   header   back · Editing badge · autosave hint · Share · Done
+ *   left     inline-editable title → seekable player (+ overlay editing) →
+ *            Trim & smart cleanup → Overlays card (add/edit/remove)
+ *   right    tabbed rail — "AI" (summary + clickable transcript) and
+ *            "Details" (share link, analytics, workspace, delete)
+ * Everything non-destructive; edits autosave (overlays debounced, trim on release).
  */
 import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   ResourceType,
-  formatBytes,
   formatDuration,
   type AnalyticsDTO,
-  type CleanupResultDTO,
   type CutSegment,
   type MediaDTO,
+  type Overlay,
   type RecordingDTO,
   type TranscriptDTO,
   type WorkspaceDTO,
 } from "@flowcap/shared";
 import { ApiError, api } from "../lib/api.js";
+import { config } from "../lib/config.js";
+import { vttUrl } from "../lib/vtt.js";
 import { useTrimClamp } from "../hooks/useTrimClamp.js";
 import { useSkipSegments } from "../hooks/useSkipSegments.js";
-import { useAuthStore } from "../stores/authStore.js";
-import { MediaPlayer } from "./MediaPlayer.js";
+import { useDrivePermission } from "../hooks/useDrivePermission.js";
 import { SharePanel } from "./SharePanel.js";
-import { Reactions } from "./Reactions.js";
-import { Comments } from "./Comments.js";
-import { Button, StorageBadge } from "./ui.js";
-import { TrashIcon } from "./icons.js";
+import { Logo, OverlayLayer, Player, RButton, Tag, newOverlay } from "./recio/index.js";
+import { Icons } from "./recio/icons.js";
+
+const fmtT = (t: number) => {
+  const m = Math.floor(t / 60);
+  const s = Math.max(0, Math.round(t % 60));
+  return `${m}:${String(s).padStart(2, "0")}`;
+};
 
 export function MediaDetail({
   media,
@@ -42,16 +49,21 @@ export function MediaDetail({
   onDelete: () => Promise<void>;
 }) {
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
+  const { setVisibility } = useDrivePermission();
   const [title, setTitle] = useState(media.title);
-  const [editing, setEditing] = useState(false);
   const [isPublic, setIsPublic] = useState(media.isPublic);
   const [deleting, setDeleting] = useState(false);
+  const [copied, setCopied] = useState(false);
   const isRecording = media.resourceType === ResourceType.RECORDING;
   const rec = isRecording ? (media as RecordingDTO) : null;
 
-  // Non-destructive trim. Clamp playback to the saved range, except while editing.
+  // Player state wired to the real <video>.
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [railTab, setRailTab] = useState<"ai" | "details">(isRecording ? "ai" : "details");
+
+  // Non-destructive trim.
   const [editingTrim, setEditingTrim] = useState(false);
   const [savedTrim, setSavedTrim] = useState<{ start: number | null; end: number | null }>({
     start: rec?.trimStartSec ?? null,
@@ -59,21 +71,102 @@ export function MediaDetail({
   });
   useTrimClamp(videoRef, savedTrim.start, savedTrim.end, !editingTrim);
 
-  // Smart cleanup: skip filler/silence cut ranges (disabled while editing the trim).
+  // Smart cleanup skip ranges.
   const [cuts, setCuts] = useState<CutSegment[] | null>(rec?.cuts ?? null);
   useSkipSegments(videoRef, cuts, !editingTrim);
+
+  // Non-destructive overlays (text / box / blur).
+  const [overlays, setOverlays] = useState<Overlay[]>(rec?.overlays ?? []);
+  const [selOverlay, setSelOverlay] = useState<string | null>(null);
+  const overlaysDirty = useRef(false);
+  useEffect(() => {
+    if (!overlaysDirty.current) return;
+    const t = setTimeout(() => {
+      void api.updateRecording(media.id, { overlays: overlays.length ? overlays : null });
+    }, 700);
+    return () => clearTimeout(t);
+  }, [overlays, media.id]);
+  function changeOverlays(next: Overlay[]) {
+    overlaysDirty.current = true;
+    setOverlays(next);
+  }
+  function addOverlay(type: Overlay["type"]) {
+    const time = videoRef.current?.currentTime ?? progress * duration;
+    const ov = newOverlay(type, time, duration);
+    changeOverlays([...overlays, ov]);
+    setSelOverlay(ov.id);
+  }
+  const selected = overlays.find((o) => o.id === selOverlay) ?? null;
+
+  // Editor keyboard: Delete/Backspace removes the selected overlay, Esc deselects.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = document.activeElement;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+      if (e.key === "Escape") setSelOverlay(null);
+      if ((e.key === "Delete" || e.key === "Backspace") && selOverlay) {
+        changeOverlays(overlays.filter((o) => o.id !== selOverlay));
+        setSelOverlay(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  // AI transcript + summary.
+  const [transcript, setTranscript] = useState<TranscriptDTO | null | "loading">(isRecording ? "loading" : null);
+  useEffect(() => {
+    if (!isRecording) return;
+    api
+      .getTranscript(media.id)
+      .then((r) => setTranscript(r.transcript))
+      .catch(() => setTranscript(null));
+  }, [media.id, isRecording]);
+
+  // Captions track (WebVTT) from the transcript's word timestamps.
+  const [captionsUrl, setCaptionsUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const words = transcript && transcript !== "loading" ? transcript.words : null;
+    if (!words?.length) return;
+    const url = vttUrl(words);
+    setCaptionsUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [transcript]);
+
+  // Sync the custom scrub/play button with the real media element.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onTime = () => v.duration && setProgress(v.currentTime / v.duration);
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    v.addEventListener("timeupdate", onTime);
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    return () => {
+      v.removeEventListener("timeupdate", onTime);
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+    };
+  }, [playbackUrl]);
+
+  function togglePlay() {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) void v.play();
+    else v.pause();
+  }
+
+  async function commitTitle() {
+    const next = title.trim();
+    if (next && next !== media.title) await onRename(next);
+    else setTitle(media.title);
+  }
 
   async function saveTrim(start: number | null, end: number | null) {
     await api.updateRecording(media.id, { trimStartSec: start, trimEndSec: end });
     setSavedTrim({ start, end });
     setEditingTrim(false);
-  }
-
-  async function commitTitle() {
-    setEditing(false);
-    const next = title.trim();
-    if (next && next !== media.title) await onRename(next);
-    else setTitle(media.title);
   }
 
   async function confirmDelete() {
@@ -82,443 +175,645 @@ export function MediaDetail({
     navigate("/dashboard");
   }
 
-  const initial = (user?.name ?? user?.email ?? "?").charAt(0).toUpperCase();
+  async function share() {
+    if (!isPublic) {
+      setIsPublic(true);
+      const ok = await setVisibility(media.shareToken, true);
+      if (!ok) setIsPublic(false);
+    }
+    await navigator.clipboard.writeText(`${config.apiBaseUrl}/s/${media.shareToken}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  }
+
+  const duration = rec?.duration ?? 0;
+  const viewHref = `${isRecording ? "/recordings" : "/screenshots"}/${media.id}`;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-5">
-      <Link to="/dashboard" className="text-sm text-muted hover:text-text-primary">
-        ← Library
-      </Link>
+    <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", background: "var(--paper)" }}>
+      {/* header */}
+      <header
+        style={{
+          height: 60,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "0 20px",
+          borderBottom: "1px solid var(--line)",
+          background: "var(--surface)",
+        }}
+      >
+        <button
+          onClick={() => navigate(viewHref)}
+          title="Back to the video"
+          style={{ display: "inline-flex", alignItems: "center", gap: 10, border: "none", background: "transparent", cursor: "pointer", padding: 0, color: "var(--ink-3)" }}
+        >
+          <Icons.ChevD size={18} style={{ transform: "rotate(90deg)" }} />
+          <Logo size={22} />
+        </button>
+        <span style={{ width: 1, height: 22, background: "var(--line-2)" }} />
+        <Tag tone="accent">
+          <Icons.Bolt size={12} /> Editing
+        </Tag>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+          <span className="mono" style={{ fontSize: 11, color: "var(--ink-4)" }}>
+            Saved automatically · edits never touch the original file
+          </span>
+          <RButton variant="outline" size="sm" icon={copied ? Icons.Check : Icons.Share} onClick={share}>
+            {copied ? "Link copied" : "Share"}
+          </RButton>
+          <RButton variant="primary" size="sm" icon={Icons.Check} onClick={() => navigate(viewHref)}>
+            Done
+          </RButton>
+        </div>
+      </header>
 
-      <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
-        {/* Main column */}
-        <div className="flex flex-col gap-4">
-          {/* Editable title */}
-          {editing ? (
-            <input
-              autoFocus
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={(e) => e.key === "Enter" && commitTitle()}
-              className="w-full rounded-md border border-accent bg-bg-secondary px-2.5 py-1.5 text-xl font-semibold outline-none"
-            />
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 332px", minHeight: 0 }}>
+        {/* editor */}
+        <div className="r-scroll" style={{ overflow: "auto", padding: "26px 28px" }}>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            style={{
+              width: "100%",
+              border: "none",
+              outline: "none",
+              background: "transparent",
+              fontFamily: "var(--sans)",
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: "-0.02em",
+              color: "var(--ink)",
+              marginBottom: 16,
+              padding: 0,
+            }}
+          />
+
+          {isRecording ? (
+            <div style={{ position: "relative" }}>
+              <Player
+                ref={videoRef}
+                src={playbackUrl}
+                progress={progress}
+                playing={playing}
+                onToggle={togglePlay}
+                onSeek={(f) => {
+                  const v = videoRef.current;
+                  if (v && duration) v.currentTime = f * duration;
+                }}
+                dur={duration}
+                big
+                captionsUrl={captionsUrl}
+              />
+              <OverlayLayer
+                overlays={overlays}
+                time={progress * duration}
+                editable
+                selectedId={selOverlay}
+                onSelect={setSelOverlay}
+                onChange={changeOverlays}
+              />
+            </div>
           ) : (
-            <h1
-              onClick={() => setEditing(true)}
-              className="group flex cursor-text items-center gap-2 rounded-md px-1 text-xl font-semibold tracking-tight"
-              title="Click to rename"
+            <div
+              style={{
+                borderRadius: "var(--r-lg)",
+                overflow: "hidden",
+                border: "1px solid var(--line)",
+                background: "var(--hud)",
+                boxShadow: "var(--e3)",
+              }}
             >
-              {title}
-              <PencilHint />
-            </h1>
+              <img src={playbackUrl} alt={title} style={{ display: "block", width: "100%", maxHeight: "70vh", objectFit: "contain" }} />
+            </div>
           )}
 
-          <MediaPlayer media={media} playbackUrl={playbackUrl} videoRef={videoRef} />
-
           {rec && rec.duration > 0 && (
-            <div>
-              {!editingTrim ? (
-                <button
-                  onClick={() => setEditingTrim(true)}
-                  className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-text-primary"
-                >
-                  <ScissorsIcon />
-                  {savedTrim.start != null || savedTrim.end != null ? "Edit trim" : "Trim"}
-                </button>
-              ) : (
-                <TrimEditor
-                  duration={rec.duration}
-                  videoRef={videoRef}
-                  initialStart={savedTrim.start ?? 0}
-                  initialEnd={savedTrim.end ?? rec.duration}
-                  onCancel={() => setEditingTrim(false)}
-                  onReset={() => void saveTrim(null, null)}
-                  onSave={(start, end) => void saveTrim(start, end)}
+            <TrimCard
+              duration={rec.duration}
+              videoRef={videoRef}
+              progress={progress}
+              saved={savedTrim}
+              onEditingChange={setEditingTrim}
+              onSave={(s, e) => void saveTrim(s, e)}
+              recordingId={media.id}
+              cuts={cuts}
+              onCuts={setCuts}
+            />
+          )}
+
+          {isRecording && (
+            <div
+              style={{
+                marginTop: 14,
+                background: "var(--surface)",
+                border: "1px solid var(--line)",
+                borderRadius: "var(--r-lg)",
+                padding: 16,
+                boxShadow: "var(--e1)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: selected ? 12 : 0 }}>
+                <Icons.Plus size={16} style={{ color: "var(--ink-2)" }} />
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Overlays</span>
+                <span className="mono" style={{ fontSize: 11, color: "var(--ink-4)" }}>
+                  {overlays.length
+                    ? `${overlays.length} on this video — click one to edit`
+                    : "label, highlight, or blur part of the frame"}
+                </span>
+                <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                  <RButton variant="soft" size="sm" icon={Icons.Plus} onClick={() => addOverlay("text")}>Text</RButton>
+                  <RButton variant="soft" size="sm" icon={Icons.Plus} onClick={() => addOverlay("rect")}>Box</RButton>
+                  <RButton variant="soft" size="sm" icon={Icons.Blur} onClick={() => addOverlay("blur")}>Blur</RButton>
+                </div>
+              </div>
+              {selected && (
+                <OverlayProps
+                  overlay={selected}
+                  duration={duration}
+                  onChange={(patch) => changeOverlays(overlays.map((o) => (o.id === selected.id ? { ...o, ...patch } : o)))}
+                  onDelete={() => {
+                    changeOverlays(overlays.filter((o) => o.id !== selected.id));
+                    setSelOverlay(null);
+                  }}
                 />
               )}
             </div>
           )}
-
-          {/* Owner + meta + reactions */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/15 text-sm font-medium text-accent">
-                {initial}
-              </span>
-              <div className="leading-tight">
-                <p className="text-sm font-medium">{user?.name ?? "You"}</p>
-                <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted">
-                  {media.viewCount} views · {formatBytes(media.size)}
-                  {isRecording && media.duration > 0 ? ` · ${formatDuration(media.duration)}` : ""}
-                  <span>·</span> {new Date(media.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-            <Reactions resourceType={media.resourceType} resourceId={media.id} />
-          </div>
-
-          <Comments resourceType={media.resourceType} resourceId={media.id} />
         </div>
 
-        {/* Right rail */}
-        <div className="flex flex-col gap-4">
-          <SharePanel
-            shareToken={media.shareToken}
-            isPublic={isPublic}
-            provider={media.storageProvider}
-            onChange={setIsPublic}
-          />
-
-          <AnalyticsPanel mediaId={media.id} />
-
-          <MoveToWorkspace media={media} />
-
-
-          {isRecording && <TranscriptPanel recordingId={media.id} />}
-
-          {isRecording && <CleanupPanel recordingId={media.id} cuts={cuts} onChange={setCuts} />}
-
-          <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
-            <span className="flex items-center gap-2 text-xs text-muted">
-              Stored in <StorageBadge provider={media.storageProvider} />
-            </span>
-            <DeleteDialog deleting={deleting} onConfirm={confirmDelete} />
+        {/* side panel — tabbed so share/analytics/workspace are one click away */}
+        <aside
+          className="r-scroll"
+          style={{
+            borderLeft: "1px solid var(--line)",
+            background: "var(--surface)",
+            overflow: "auto",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <div style={{ display: "flex", borderBottom: "1px solid var(--line)", padding: "0 12px", position: "sticky", top: 0, background: "var(--surface)", zIndex: 2 }}>
+            {(
+              [
+                ["ai", "AI", Icons.Bolt],
+                ["details", "Details", Icons.Gear],
+              ] as const
+            ).map(([key, label, Ico]) => {
+              const on = railTab === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setRailTab(key)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "13px 12px 11px",
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    fontFamily: "var(--sans)",
+                    fontSize: 13,
+                    fontWeight: on ? 700 : 500,
+                    color: on ? "var(--ink)" : "var(--ink-3)",
+                    borderBottom: "2px solid",
+                    borderBottomColor: on ? "var(--accent)" : "transparent",
+                  }}
+                >
+                  <Ico size={14} />
+                  {label}
+                </button>
+              );
+            })}
           </div>
-        </div>
+
+          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 20 }}>
+            {railTab === "ai" ? (
+              <>
+                <AutoSummary transcript={transcript} recordingId={media.id} isRecording={isRecording} onChange={setTranscript} />
+                {isRecording && (
+                  <TranscriptList
+                    transcript={transcript}
+                    duration={duration}
+                    onSeek={(t) => {
+                      const v = videoRef.current;
+                      if (v) {
+                        v.currentTime = t;
+                        void v.play();
+                      }
+                    }}
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <SharePanel shareToken={media.shareToken} isPublic={isPublic} provider={media.storageProvider} onChange={setIsPublic} />
+                <AnalyticsPanel mediaId={media.id} />
+                <MoveToWorkspace media={media} />
+                <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
+                  <span className="flex items-center gap-2 text-xs text-muted">Stored in your cloud</span>
+                  <DeleteDialog deleting={deleting} onConfirm={confirmDelete} />
+                </div>
+              </>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );
 }
 
-/** AI transcript + summary: shows the result, or a Generate button (Pro-metered). */
-function TranscriptPanel({ recordingId }: { recordingId: string }) {
-  const [t, setT] = useState<TranscriptDTO | null | "loading">("loading");
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+/* ---------------- Section header ---------------- */
+function SectionHead({ icon: Ico, title, badge }: { icon: typeof Icons.Bolt; title: string; badge?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
+      <Ico size={16} style={{ color: "var(--ink-2)" }} />
+      <span style={{ fontWeight: 700, fontSize: 13.5 }}>{title}</span>
+      {badge && (
+        <Tag tone="accent" style={{ marginLeft: "auto", height: 19, fontSize: 10 }}>
+          {badge}
+        </Tag>
+      )}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    api
-      .getTranscript(recordingId)
-      .then((r) => setT(r.transcript))
-      .catch(() => setT(null));
-  }, [recordingId]);
+/* ---------------- Auto summary ---------------- */
+function AutoSummary({
+  transcript,
+  recordingId,
+  isRecording,
+  onChange,
+}: {
+  transcript: TranscriptDTO | null | "loading";
+  recordingId: string;
+  isRecording: boolean;
+  onChange: (t: TranscriptDTO) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const ready = transcript && transcript !== "loading" && transcript.status === "READY";
+  const summary = ready ? (transcript as TranscriptDTO).summary : null;
 
   async function generate() {
     setBusy(true);
-    setNote(null);
     try {
       const r = await api.generateTranscript(recordingId);
-      setT(r.transcript);
-    } catch (err) {
-      // 402 (over minutes) is handled by the global upsell modal; surface other errors.
-      setNote(err instanceof ApiError && err.code !== "UPGRADE_REQUIRED" ? err.message : null);
+      onChange(r.transcript);
+    } catch {
+      /* upsell modal handles 402 */
     } finally {
       setBusy(false);
     }
   }
 
-  const ready = t && t !== "loading" && t.status === "READY";
+  const tags = summary
+    ? Array.from(new Set(summary.toLowerCase().match(/[a-z]{5,}/g) ?? []))
+        .filter((w) => !["about", "which", "their", "there", "these", "those", "would", "could"].includes(w))
+        .slice(0, 3)
+    : [];
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm font-medium">
-          <SparkleIcon /> AI transcript
-        </h3>
-        {ready && (t as TranscriptDTO).language && (
-          <span className="rounded-full bg-bg-primary px-2 py-0.5 font-mono text-[10px] uppercase text-muted ring-1 ring-border">
-            {(t as TranscriptDTO).language}
-          </span>
-        )}
-      </div>
-
-      {t === "loading" ? (
-        <p className="mt-2 text-xs text-muted">Loading…</p>
-      ) : ready ? (
-        <div className="mt-2">
-          {(t as TranscriptDTO).summary && (
-            <p className="rounded-lg bg-bg-primary p-2.5 text-xs leading-relaxed text-text-primary">
-              {(t as TranscriptDTO).summary}
-            </p>
+    <div>
+      <SectionHead icon={Icons.Bolt} title="Auto summary" badge="AI" />
+      {!isRecording ? (
+        <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--ink-3)" }}>Screenshots don't have a summary.</p>
+      ) : transcript === "loading" ? (
+        <p style={{ margin: 0, fontSize: 13, color: "var(--ink-4)" }}>Loading…</p>
+      ) : summary ? (
+        <>
+          <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--ink-2)" }}>{summary}</p>
+          {tags.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+              {tags.map((t) => (
+                <Tag key={t}>#{t}</Tag>
+              ))}
+            </div>
           )}
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="mt-2 text-xs font-medium text-accent hover:text-accent-hover"
-          >
-            {open ? "Hide transcript" : "Show full transcript"}
-          </button>
-          {open && (
-            <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-muted">
-              {(t as TranscriptDTO).text || "(no speech detected)"}
-            </p>
-          )}
-        </div>
-      ) : t && (t as TranscriptDTO).status === "PROCESSING" ? (
-        <p className="mt-2 text-xs text-muted">Transcribing… refresh in a moment.</p>
+        </>
       ) : (
-        <div className="mt-2">
-          <p className="text-xs text-muted">
-            Generate a searchable transcript, AI title, and summary for this recording.
+        <>
+          <p style={{ margin: "0 0 12px", fontSize: 13.5, lineHeight: 1.6, color: "var(--ink-3)" }}>
+            Generate an AI summary, title, and searchable transcript for this recording.
           </p>
-          <Button variant="highlight" size="sm" className="mt-2.5" onClick={generate} disabled={busy}>
-            {busy ? "Generating…" : "Generate transcript"}
-          </Button>
-          {note && <p className="mt-2 text-xs text-muted">{note}</p>}
-        </div>
+          <RButton variant="soft" size="sm" icon={Icons.Bolt} onClick={generate} disabled={busy}>
+            {busy ? "Generating…" : "Generate"}
+          </RButton>
+        </>
       )}
     </div>
   );
 }
 
-/** Smart cleanup: one click to skip filler words + silences (non-destructive). */
-function CleanupPanel({
-  recordingId,
-  cuts,
-  onChange,
+/* ---------------- Transcript (click a line to jump there) ---------------- */
+interface TLine {
+  at: number | null; // real start (seconds) when word timings exist
+  text: string;
+}
+
+function transcriptLines(t: TranscriptDTO): TLine[] {
+  // Preferred: word-level timestamps → real, clickable line starts.
+  if (t.words?.length) {
+    const lines: TLine[] = [];
+    let group: typeof t.words = [];
+    const flush = () => {
+      if (!group.length) return;
+      lines.push({ at: group[0]!.start, text: group.map((w) => w.word).join(" ") });
+      group = [];
+    };
+    for (const w of t.words) {
+      group.push(w);
+      const sentenceEnd = /[.?!]$/.test(w.word);
+      if (sentenceEnd || group.length >= 24) flush();
+    }
+    flush();
+    return lines.slice(0, 80);
+  }
+  // Fallback: plain text split (no timings → not clickable).
+  return (t.text ?? "")
+    .split(/(?<=[.?!])\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 40)
+    .map((text) => ({ at: null, text }));
+}
+
+function TranscriptList({
+  transcript,
+  duration,
+  onSeek,
 }: {
-  recordingId: string;
-  cuts: CutSegment[] | null;
-  onChange: (cuts: CutSegment[] | null) => void;
+  transcript: TranscriptDTO | null | "loading";
+  duration: number;
+  onSeek?: (seconds: number) => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [stats, setStats] = useState<CleanupResultDTO | null>(null);
-  const active = Boolean(cuts && cuts.length > 0);
-
-  async function run() {
-    setBusy(true);
-    setNote(null);
-    try {
-      const { cleanup } = await api.runCleanup(recordingId);
-      onChange(cleanup.cuts);
-      setStats(cleanup);
-      if (cleanup.cuts.length === 0) setNote("Nothing to trim — no filler or long silences found.");
-    } catch (err) {
-      setNote(err instanceof ApiError && err.code !== "UPGRADE_REQUIRED" ? err.message : null);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function reset() {
-    setBusy(true);
-    try {
-      await api.clearCleanup(recordingId);
-      onChange(null);
-      setStats(null);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const ready = transcript && transcript !== "loading" && transcript.status === "READY";
+  const lang = ready ? (transcript as TranscriptDTO).language : null;
+  const lines = ready ? transcriptLines(transcript as TranscriptDTO) : [];
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <h3 className="flex items-center gap-1.5 text-sm font-medium">
-        <SparkleIcon /> Smart cleanup
-      </h3>
-      {active ? (
-        <div className="mt-1.5">
-          <p className="text-xs text-text-primary">
-            Skipping {cuts!.length} dead spot{cuts!.length === 1 ? "" : "s"}
-            {stats ? ` · ~${stats.savedSec}s shorter` : ""}.
-          </p>
-          <button onClick={reset} disabled={busy} className="mt-2 text-xs text-muted hover:text-danger">
-            Reset
-          </button>
-        </div>
+    <div>
+      <SectionHead icon={Icons.Comment} title="Transcript" badge={lang ? lang.toUpperCase().slice(0, 2) : undefined} />
+      {transcript === "loading" ? (
+        <p style={{ margin: 0, fontSize: 13, color: "var(--ink-4)" }}>Loading…</p>
+      ) : lines.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 13, color: "var(--ink-4)" }}>No transcript yet — generate one above.</p>
       ) : (
-        <div className="mt-1">
-          <p className="text-xs text-muted">Auto‑remove filler words and long silences (uses the transcript).</p>
-          <Button variant="highlight" size="sm" className="mt-2.5" onClick={run} disabled={busy}>
-            {busy ? "Cleaning…" : "Remove filler & silences"}
-          </Button>
-          {note && <p className="mt-2 text-xs text-muted">{note}</p>}
-        </div>
+        lines.map((line, i) => {
+          const at = line.at ?? (duration ? (i / lines.length) * duration : 0);
+          const clickable = Boolean(onSeek);
+          return (
+            <div
+              key={i}
+              onClick={clickable ? () => onSeek!(at) : undefined}
+              title={clickable ? "Jump to this moment" : undefined}
+              style={{
+                display: "flex",
+                gap: 10,
+                padding: "8px 6px",
+                margin: "0 -6px",
+                borderTop: i ? "1px solid var(--line)" : "none",
+                borderRadius: 6,
+                cursor: clickable ? "pointer" : "default",
+              }}
+              onMouseEnter={(e) => clickable && (e.currentTarget.style.background = "var(--surface-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <span className="mono" style={{ fontSize: 11, color: "var(--accent-ink)", fontWeight: 600, flexShrink: 0, paddingTop: 1 }}>
+                {fmtT(at)}
+              </span>
+              <span style={{ fontSize: 13, lineHeight: 1.5, color: "var(--ink-2)" }}>{line.text}</span>
+            </div>
+          );
+        })
       )}
     </div>
   );
 }
 
-function SparkleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent">
-      <path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z" />
-    </svg>
-  );
-}
-
-/** Move this media into a team workspace's shared library (or back to personal). */
-function MoveToWorkspace({ media }: { media: MediaDTO }) {
-  const [workspaces, setWorkspaces] = useState<WorkspaceDTO[] | null>(null);
-  const [current, setCurrent] = useState<string>(media.workspaceId ?? "");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    api
-      .listWorkspaces()
-      .then((r) => setWorkspaces(r.workspaces))
-      .catch(() => setWorkspaces([]));
-  }, []);
-
-  if (!workspaces || workspaces.length === 0) return null;
-
-  async function move(value: string) {
-    setCurrent(value);
-    setSaving(true);
-    const body = { workspaceId: value || null };
-    try {
-      if (media.resourceType === ResourceType.RECORDING) await api.updateRecording(media.id, body);
-      else await api.updateScreenshot(media.id, body);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-medium">Workspace</h3>
-      <p className="mt-1 text-xs text-muted">Share this in a team's library.</p>
-      <select
-        value={current}
-        disabled={saving}
-        onChange={(e) => void move(e.target.value)}
-        className="mt-2 w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-sm outline-none focus:border-accent"
-      >
-        <option value="">Personal (only you)</option>
-        {workspaces.map((w) => (
-          <option key={w.id} value={w.id}>
-            {w.name}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function ScissorsIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
-      <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12" />
-    </svg>
-  );
-}
-
-/**
- * Non-destructive trim editor: a timeline with draggable start/end handles. Dragging
- * scrubs the (clamp-disabled) video for preview; Save persists the bounds, Reset clears
- * them. The underlying file is never re-encoded — only playback is bounded.
- */
-function TrimEditor({
+/* ---------------- Trim card (handoff waveform look, real drag) ---------------- */
+function TrimCard({
   duration,
   videoRef,
-  initialStart,
-  initialEnd,
+  progress,
+  saved,
+  onEditingChange,
   onSave,
-  onReset,
-  onCancel,
+  recordingId,
+  cuts,
+  onCuts,
 }: {
   duration: number;
   videoRef: React.RefObject<HTMLVideoElement | null>;
-  initialStart: number;
-  initialEnd: number;
-  onSave: (start: number, end: number) => void;
-  onReset: () => void;
-  onCancel: () => void;
+  progress: number;
+  saved: { start: number | null; end: number | null };
+  onEditingChange: (v: boolean) => void;
+  onSave: (start: number | null, end: number | null) => void;
+  recordingId: string;
+  cuts: CutSegment[] | null;
+  onCuts: (c: CutSegment[] | null) => void;
 }) {
   const barRef = useRef<HTMLDivElement | null>(null);
-  const [start, setStart] = useState(initialStart);
-  const [end, setEnd] = useState(Math.min(initialEnd, duration));
+  const [start, setStart] = useState(saved.start ?? 0);
+  const [end, setEnd] = useState(saved.end ?? duration);
+  const [cleaning, setCleaning] = useState(false);
+
+  const startPct = (start / duration) * 100;
+  const endPct = (end / duration) * 100;
 
   function timeFromX(clientX: number): number {
     const bar = barRef.current;
     if (!bar) return 0;
     const r = bar.getBoundingClientRect();
-    const pct = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
-    return pct * duration;
+    return Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * duration;
   }
 
-  function dragHandle(which: "start" | "end") {
+  function drag(which: "start" | "end") {
     return (e: React.PointerEvent) => {
       e.preventDefault();
+      onEditingChange(true);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       const move = (ev: PointerEvent) => {
         const t = timeFromX(ev.clientX);
         if (which === "start") {
-          const next = Math.min(t, end - 0.5);
-          setStart(Math.max(0, next));
-          if (videoRef.current) videoRef.current.currentTime = Math.max(0, next);
+          const next = Math.max(0, Math.min(t, end - 0.5));
+          setStart(next);
+          if (videoRef.current) videoRef.current.currentTime = next;
         } else {
-          const next = Math.max(t, start + 0.5);
-          setEnd(Math.min(duration, next));
-          if (videoRef.current) videoRef.current.currentTime = Math.min(duration, next);
+          const next = Math.min(duration, Math.max(t, start + 0.5));
+          setEnd(next);
+          if (videoRef.current) videoRef.current.currentTime = next;
         }
       };
       const up = () => {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        onSave(start === 0 ? null : start, end >= duration ? null : end);
       };
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
     };
   }
 
-  const startPct = (start / duration) * 100;
-  const endPct = (end / duration) * 100;
+  async function removeSilences() {
+    setCleaning(true);
+    try {
+      const { cleanup } = await api.runCleanup(recordingId);
+      onCuts(cleanup.cuts);
+    } catch {
+      /* upsell handles 402 */
+    } finally {
+      setCleaning(false);
+    }
+  }
 
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Trim</span>
-        <span className="font-mono text-[11px] text-muted">
-          {formatDuration(start)} – {formatDuration(end)} · {formatDuration(Math.max(0, end - start))}
-        </span>
-      </div>
+  const kept = Math.max(0, end - start);
 
-      <div ref={barRef} className="relative mt-4 h-10 select-none rounded-lg bg-bg-primary ring-1 ring-border">
-        {/* dimmed-out regions outside the selection */}
-        <div className="absolute inset-y-0 left-0 rounded-l-lg bg-black/10" style={{ width: `${startPct}%` }} />
-        <div className="absolute inset-y-0 right-0 rounded-r-lg bg-black/10" style={{ width: `${100 - endPct}%` }} />
-        {/* selected region */}
-        <div
-          className="absolute inset-y-0 border-y-2 border-highlight bg-highlight/20"
-          style={{ left: `${startPct}%`, right: `${100 - endPct}%` }}
-        />
-        <Handle pct={startPct} onPointerDown={dragHandle("start")} />
-        <Handle pct={endPct} onPointerDown={dragHandle("end")} />
-      </div>
-
-      <div className="mt-4 flex items-center justify-between">
-        <button onClick={onReset} className="text-xs text-muted hover:text-danger">
-          Reset
-        </button>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button variant="highlight" size="sm" onClick={() => onSave(start, end)}>
-            Save trim
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Handle({ pct, onPointerDown }: { pct: number; onPointerDown: (e: React.PointerEvent) => void }) {
   return (
     <div
-      onPointerDown={onPointerDown}
-      className="absolute top-1/2 z-[1] flex h-12 w-3.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded bg-accent shadow"
-      style={{ left: `${pct}%` }}
+      style={{
+        marginTop: 20,
+        background: "var(--surface)",
+        border: "1px solid var(--line)",
+        borderRadius: "var(--r-lg)",
+        padding: 16,
+        boxShadow: "var(--e1)",
+      }}
     >
-      <span className="h-5 w-0.5 rounded bg-white/80" />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
+        <Icons.Trim size={17} style={{ color: "var(--ink-2)" }} />
+        <span style={{ fontWeight: 700, fontSize: 14 }}>Trim</span>
+        <span className="mono" style={{ fontSize: 12, color: "var(--ink-4)" }}>
+          {fmtT(kept)} kept{cuts && cuts.length ? ` · ${cuts.length} cut${cuts.length === 1 ? "" : "s"}` : ""}
+        </span>
+        <div style={{ marginLeft: "auto" }}>
+          <RButton variant="soft" size="sm" icon={Icons.Speed} onClick={removeSilences} disabled={cleaning}>
+            {cleaning ? "Cleaning…" : "Remove silences"}
+          </RButton>
+        </div>
+      </div>
+      <div ref={barRef} style={{ position: "relative", height: 52, borderRadius: 10, background: "var(--hud)", overflow: "hidden", userSelect: "none" }}>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", gap: 2.5, padding: "0 4px" }}>
+          {Array.from({ length: 64 }).map((_, i) => (
+            <span key={i} style={{ flex: 1, height: `${24 + Math.abs(Math.sin(i * 0.7)) * 22}px`, background: "rgba(255,255,255,.18)", borderRadius: 2 }} />
+          ))}
+        </div>
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: `${startPct}%`, background: "oklch(0.16 0.01 262 / 0.7)" }} />
+        <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: `${100 - endPct}%`, background: "oklch(0.16 0.01 262 / 0.7)" }} />
+        {([["start", startPct], ["end", endPct]] as const).map(([which, pct]) => (
+          <div
+            key={which}
+            onPointerDown={drag(which)}
+            style={{ position: "absolute", top: 0, bottom: 0, left: `calc(${pct}% - 6px)`, width: 12, cursor: "ew-resize", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}
+          >
+            <span style={{ width: 6, height: "100%", background: "var(--accent)", borderRadius: 4, boxShadow: "var(--e1)" }} />
+          </div>
+        ))}
+        <div style={{ position: "absolute", top: -2, bottom: -2, left: `${progress * 100}%`, width: 2, background: "white", boxShadow: "0 0 8px rgba(0,0,0,.5)" }} />
+      </div>
     </div>
   );
 }
 
-/** Engagement analytics for the owner: views, unique viewers, and (Pro) a retention curve. */
+/* ---------------- Selected overlay properties ---------------- */
+function OverlayProps({
+  overlay,
+  duration,
+  onChange,
+  onDelete,
+}: {
+  overlay: Overlay;
+  duration: number;
+  onChange: (patch: Partial<Overlay>) => void;
+  onDelete: () => void;
+}) {
+  const swatches = ["#2563EB", "#FF5C5C", "#FFD23F", "#7C5CFF", "#22C55E", "#1D1D1F"];
+  const label = overlay.type === "text" ? "Text" : overlay.type === "blur" ? "Blur" : "Box";
+  return (
+    <div style={{ marginTop: 12, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--r-lg)", padding: 14, boxShadow: "var(--e1)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ fontWeight: 700, fontSize: 13.5 }}>{label} overlay</span>
+        <span className="mono" style={{ fontSize: 11, color: "var(--ink-4)" }}>drag to move · corner to resize</span>
+        <div style={{ marginLeft: "auto" }}>
+          <RButton variant="ghost" size="sm" icon={Icons.Trash} onClick={onDelete}>
+            Remove
+          </RButton>
+        </div>
+      </div>
+
+      {overlay.type === "text" && (
+        <input
+          value={overlay.text ?? ""}
+          onChange={(e) => onChange({ text: e.target.value })}
+          placeholder="Overlay text"
+          style={{ width: "100%", height: 36, borderRadius: "var(--r)", border: "1px solid var(--line-2)", background: "var(--surface)", padding: "0 12px", fontSize: 13.5, outline: "none", fontFamily: "var(--sans)", marginBottom: 12 }}
+        />
+      )}
+
+      {overlay.type !== "blur" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <span style={{ fontSize: 12, color: "var(--ink-3)", fontWeight: 600 }}>Color</span>
+          {swatches.map((c) => (
+            <button
+              key={c}
+              onClick={() => onChange({ color: c })}
+              style={{ width: 22, height: 22, borderRadius: 6, background: c, border: overlay.color === c ? "2px solid var(--ink)" : "1px solid var(--line)", cursor: "pointer" }}
+            />
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <span style={{ fontSize: 12, color: "var(--ink-3)", fontWeight: 600 }}>Shows</span>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-2)" }}>
+          from
+          <input
+            type="number"
+            min={0}
+            max={duration}
+            step={0.5}
+            value={Math.round(overlay.startSec * 10) / 10}
+            onChange={(e) => onChange({ startSec: Math.min(overlay.endSec, Math.max(0, Number(e.target.value))) })}
+            className="mono"
+            style={timeInput}
+          />
+          s
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-2)" }}>
+          to
+          <input
+            type="number"
+            min={0}
+            max={duration}
+            step={0.5}
+            value={Math.round(overlay.endSec * 10) / 10}
+            onChange={(e) => onChange({ endSec: Math.max(overlay.startSec, Math.min(duration, Number(e.target.value))) })}
+            className="mono"
+            style={timeInput}
+          />
+          s
+        </label>
+      </div>
+    </div>
+  );
+}
+
+const timeInput: React.CSSProperties = {
+  width: 64,
+  height: 30,
+  borderRadius: "var(--r-sm)",
+  border: "1px solid var(--line-2)",
+  background: "var(--surface-2)",
+  padding: "0 8px",
+  fontSize: 12,
+  outline: "none",
+  color: "var(--ink)",
+};
+
+/* ── reused functional panels (Tailwind, auto-themed) ───────────────────────── */
 function AnalyticsPanel({ mediaId }: { mediaId: string }) {
   const navigate = useNavigate();
   const [data, setData] = useState<AnalyticsDTO | null>(null);
@@ -530,7 +825,6 @@ function AnalyticsPanel({ mediaId }: { mediaId: string }) {
     };
   }, [mediaId]);
 
-  // Histogram of max-reached buckets → a monotonic retention curve (≥ each point).
   const retention = data?.pro
     ? data.pro.dropOff.map((_, k) => data.pro!.dropOff.slice(k).reduce((s, n) => s + n, 0))
     : [];
@@ -538,12 +832,11 @@ function AnalyticsPanel({ mediaId }: { mediaId: string }) {
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-medium">Analytics</h3>
+      <h3 className="text-sm font-semibold">Analytics</h3>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Stat label="Views" value={data ? data.views : "—"} />
         <Stat label="Unique viewers" value={data ? data.uniqueViewers : "—"} />
       </div>
-
       {data?.pro ? (
         <div className="mt-4">
           <div className="flex items-center justify-between text-xs">
@@ -553,17 +846,8 @@ function AnalyticsPanel({ mediaId }: { mediaId: string }) {
           <p className="mb-1.5 mt-3 text-[11px] text-muted">Viewer retention</p>
           <div className="flex h-20 items-end gap-1">
             {retention.map((count, i) => (
-              <div
-                key={i}
-                className="flex-1 rounded-t bg-highlight"
-                style={{ height: `${Math.max(3, (count / denom) * 100)}%` }}
-                title={`${i * 10}%+ watched · ${count} ${count === 1 ? "viewer" : "viewers"}`}
-              />
+              <div key={i} className="flex-1 rounded-t bg-highlight" style={{ height: `${Math.max(3, (count / denom) * 100)}%` }} />
             ))}
-          </div>
-          <div className="mt-1 flex justify-between text-[10px] text-muted">
-            <span>0%</span>
-            <span>100%</span>
           </div>
         </div>
       ) : (
@@ -587,21 +871,46 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-function PencilHint() {
+function MoveToWorkspace({ media }: { media: MediaDTO }) {
+  const [workspaces, setWorkspaces] = useState<WorkspaceDTO[] | null>(null);
+  const [current, setCurrent] = useState<string>(media.workspaceId ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.listWorkspaces().then((r) => setWorkspaces(r.workspaces)).catch(() => setWorkspaces([]));
+  }, []);
+
+  if (!workspaces || workspaces.length === 0) return null;
+
+  async function move(value: string) {
+    setCurrent(value);
+    setSaving(true);
+    const body = { workspaceId: value || null };
+    try {
+      if (media.resourceType === ResourceType.RECORDING) await api.updateRecording(media.id, body);
+      else await api.updateScreenshot(media.id, body);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <svg
-      className="opacity-0 transition-opacity group-hover:opacity-60"
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
-    </svg>
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <h3 className="text-sm font-semibold">Workspace</h3>
+      <select
+        value={current}
+        disabled={saving}
+        onChange={(e) => void move(e.target.value)}
+        className="mt-2 w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+      >
+        <option value="">Personal (only you)</option>
+        {workspaces.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -609,28 +918,32 @@ function DeleteDialog({ deleting, onConfirm }: { deleting: boolean; onConfirm: (
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
-        <Button variant="danger" size="sm">
-          <TrashIcon width={15} height={15} />
-          Delete
-        </Button>
+        <button className="inline-flex items-center gap-1.5 rounded-md border border-danger/30 bg-danger/10 px-2.5 py-1.5 text-xs text-danger hover:bg-danger/20">
+          <Icons.Trash size={14} /> Delete
+        </button>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 w-[400px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-5 shadow-xl focus:outline-none">
+        <Dialog.Content className="fixed left-1/2 top-1/2 w-[400px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-5 shadow-xl focus:outline-none">
           <Dialog.Title className="text-base font-semibold">Delete this item?</Dialog.Title>
           <Dialog.Description className="mt-1.5 text-sm text-muted">
             This removes it from your library and deletes the file from your storage. This can't be undone.
           </Dialog.Description>
           <div className="mt-5 flex justify-end gap-2">
             <Dialog.Close asChild>
-              <Button variant="ghost">Cancel</Button>
+              <button className="rounded-md px-3 py-2 text-sm text-muted hover:text-text-primary">Cancel</button>
             </Dialog.Close>
-            <Button variant="danger" onClick={onConfirm} disabled={deleting}>
+            <button
+              onClick={onConfirm}
+              disabled={deleting}
+              className="rounded-md bg-danger px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
               {deleting ? "Deleting…" : "Delete"}
-            </Button>
+            </button>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );
 }
+

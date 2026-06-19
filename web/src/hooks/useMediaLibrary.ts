@@ -2,7 +2,7 @@
  * Dashboard data: fetches recordings and/or screenshots per the active filter,
  * merges them under the chosen sort, and exposes cursor-based "load more". The
  * type filter (recordings vs screenshots) picks which endpoints to hit; the
- * provider filter (Drive vs Recio) is passed through to the server.
+ * provider filter (Drive vs Vyooom) is passed through to the server.
  */
 import { useCallback, useEffect, useState } from "react";
 import { type MediaDTO } from "@flowcap/shared";
@@ -103,5 +103,10 @@ export function useMediaLibrary(filter: Filter, sort: Sort, search: string) {
     void fetchPage(false, { rec: recCursor, shot: shotCursor });
   }, [fetchPage, recCursor, shotCursor]);
 
-  return { ...state, loadMore };
+  /** Drop one item locally (after a successful delete) without refetching. */
+  const remove = useCallback((id: string) => {
+    setState((prev) => ({ ...prev, items: prev.items.filter((m) => m.id !== id) }));
+  }, []);
+
+  return { ...state, loadMore, remove };
 }

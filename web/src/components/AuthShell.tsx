@@ -21,7 +21,7 @@ export function AuthShell({
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-highlight">
             <Logo width={18} height={18} />
           </span>
-          <span className="text-lg font-semibold tracking-tight">Recio</span>
+          <span className="text-lg font-semibold tracking-tight">Vyooom</span>
         </Link>
 
         <div className="rounded-xl border border-border bg-card p-6 shadow-lg">

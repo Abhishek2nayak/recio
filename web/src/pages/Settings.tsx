@@ -4,8 +4,20 @@ import { StorageProvider, formatBytes, type BrandingDTO } from "@flowcap/shared"
 import { ApiError, api, type StorageStatus } from "../lib/api.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { Button, Card, Input, Skeleton, StorageBadge } from "../components/ui.js";
+import { ThemeToggle } from "../components/ThemeToggle.js";
+
+const SECTIONS = [
+  { id: "plan", label: "Plan & usage" },
+  { id: "storage", label: "Storage" },
+  { id: "branding", label: "Branding" },
+  { id: "appearance", label: "Appearance" },
+  { id: "account", label: "Account" },
+];
 
 export function Settings() {
+  const me = useAuthStore((s) => s.user);
+  const hostedStorage = me?.entitlements?.hostedStorage ?? false;
+  const navigateTop = useNavigate();
   const [status, setStatus] = useState<StorageStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +62,12 @@ export function Settings() {
   }
 
   async function disconnectDrive() {
+    const ok = window.confirm(
+      "Disconnect Google Drive?\n\n" +
+        "Recordings already saved in your Drive will stop playing — including links you've already shared — until you reconnect this same Google account.\n\n" +
+        "Your files stay in your Drive; nothing is deleted.",
+    );
+    if (!ok) return;
     setBusy(true);
     await api.driveDisconnect().catch(() => {});
     await load();
@@ -68,6 +86,12 @@ export function Settings() {
   }
 
   async function disconnectDropbox() {
+    const ok = window.confirm(
+      "Disconnect Dropbox?\n\n" +
+        "Recordings already saved in your Dropbox will stop playing — including links you've already shared — until you reconnect this same Dropbox account.\n\n" +
+        "Your files stay in your Dropbox; nothing is deleted.",
+    );
+    if (!ok) return;
     setBusy(true);
     await api.dropboxDisconnect().catch(() => {});
     await load();
@@ -85,12 +109,31 @@ export function Settings() {
 
   const drive = status?.connections.find((c) => c.provider === StorageProvider.DRIVE && c.isActive);
   const dropbox = status?.connections.find((c) => c.provider === StorageProvider.DROPBOX && c.isActive);
+  // Rows that exist but are inactive: the provider revoked/expired our access.
+  const driveBroken = status?.connections.find((c) => c.provider === StorageProvider.DRIVE && !c.isActive);
+  const dropboxBroken = status?.connections.find((c) => c.provider === StorageProvider.DROPBOX && !c.isActive);
   const dropboxResult = params.get("dropbox");
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-6">
+    <div className="mx-auto max-w-5xl px-6 py-6">
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-      <p className="mt-0.5 text-sm text-muted">Manage where your recordings and screenshots are stored.</p>
+      <p className="mt-0.5 text-sm text-muted">Your plan, storage, share branding, and account.</p>
+
+      <div className="mt-6 flex items-start gap-8">
+        {/* section nav */}
+        <nav className="sticky top-6 hidden w-44 shrink-0 flex-col gap-1 md:flex">
+          {SECTIONS.map((sec) => (
+            <button
+              key={sec.id}
+              onClick={() => document.getElementById(sec.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="rounded-md px-3 py-2 text-left text-sm font-medium text-muted transition-colors hover:bg-card hover:text-text-primary"
+            >
+              {sec.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="min-w-0 max-w-3xl flex-1">
 
       {params.get("billing") === "success" && (
         <div className="mt-4 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
@@ -98,7 +141,9 @@ export function Settings() {
         </div>
       )}
 
-      <PlanSection />
+      <section id="plan" style={{ scrollMarginTop: 24 }}>
+        <PlanSection />
+      </section>
 
       {driveResult === "connected" && (
         <div className="mt-4 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
@@ -108,6 +153,27 @@ export function Settings() {
       {driveResult === "error" && (
         <div className="mt-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
           Drive connection failed. Please try again.
+        </div>
+      )}
+      {driveResult === "mismatch" && (
+        <div className="mt-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          That's a different Google account than the one connected. Your existing recordings live in the
+          connected account — switching would break them. Reconnect with the same account, or disconnect it
+          first to switch.
+        </div>
+      )}
+      {dropboxResult === "mismatch" && (
+        <div className="mt-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          That's a different Dropbox account than the one connected. Your existing recordings live in the
+          connected account — switching would break them. Reconnect with the same account, or disconnect it
+          first to switch.
+        </div>
+      )}
+      {(driveBroken || dropboxBroken) && (
+        <div className="mt-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
+          {driveBroken ? "Google Drive" : "Dropbox"} lost access (it was revoked or expired). Videos saved
+          there won't play or upload — including links you've shared — until you reconnect
+          {driveBroken?.driveEmail ? ` ${driveBroken.driveEmail}` : dropboxBroken?.driveEmail ? ` ${dropboxBroken.driveEmail}` : ""}.
         </div>
       )}
       {dropboxResult === "connected" && (
@@ -121,7 +187,9 @@ export function Settings() {
         </div>
       )}
 
-      <h2 className="mt-8 text-sm font-medium text-muted">Storage connections</h2>
+      <h2 id="storage" className="mt-8 text-sm font-medium text-muted" style={{ scrollMarginTop: 24 }}>
+        Storage connections
+      </h2>
       <div className="mt-3 flex flex-col gap-3">
         {loading ? (
           <Skeleton className="h-24 w-full" />
@@ -137,7 +205,11 @@ export function Settings() {
                   <div>
                     <p className="text-sm font-medium">Google Drive</p>
                     <p className="font-mono text-[11px] text-muted">
-                      {drive ? drive.driveEmail ?? "Connected" : "Not connected"}
+                      {drive
+                        ? drive.driveEmail ?? "Connected"
+                        : driveBroken
+                          ? `${driveBroken.driveEmail ?? "Connected account"} — access lost, reconnect`
+                          : "Not connected"}
                     </p>
                   </div>
                 </div>
@@ -147,7 +219,7 @@ export function Settings() {
                   </Button>
                 ) : (
                   <Button size="sm" onClick={connectDrive} disabled={busy}>
-                    Connect
+                    {driveBroken ? "Reconnect" : "Connect"}
                   </Button>
                 )}
               </div>
@@ -179,7 +251,11 @@ export function Settings() {
                   <div>
                     <p className="text-sm font-medium">Dropbox</p>
                     <p className="font-mono text-[11px] text-muted">
-                      {dropbox ? dropbox.driveEmail ?? "Connected" : "Not connected"}
+                      {dropbox
+                        ? dropbox.driveEmail ?? "Connected"
+                        : dropboxBroken
+                          ? `${dropboxBroken.driveEmail ?? "Connected account"} — access lost, reconnect`
+                          : "Not connected"}
                     </p>
                   </div>
                 </div>
@@ -189,22 +265,38 @@ export function Settings() {
                   </Button>
                 ) : (
                   <Button size="sm" onClick={connectDropbox} disabled={busy}>
-                    Connect
+                    {dropboxBroken ? "Reconnect" : "Connect"}
                   </Button>
                 )}
               </div>
             </Card>
 
-            {/* Recio storage */}
+            {/* Vyooom Cloud (Premium destination) */}
             <Card className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <StorageBadge provider={StorageProvider.FLOWCAP} />
                   <div>
-                    <p className="text-sm font-medium">Recio storage</p>
-                    <p className="font-mono text-[11px] text-muted">Always available</p>
+                    <p className="flex items-center gap-2 text-sm font-medium">
+                      Vyooom Cloud
+                      {!hostedStorage && (
+                        <span className="rounded-full bg-highlight px-1.5 py-0.5 text-[10px] font-semibold text-accent-on">
+                          PREMIUM
+                        </span>
+                      )}
+                    </p>
+                    <p className="font-mono text-[11px] text-muted">
+                      {hostedStorage
+                        ? "Hosted on Vyooom's servers · included in your plan"
+                        : "Hosted on Vyooom's servers — connect Drive or Dropbox above to record free"}
+                    </p>
                   </div>
                 </div>
+                {!hostedStorage && (
+                  <Button variant="highlight" size="sm" onClick={() => navigateTop("/pricing")}>
+                    Upgrade
+                  </Button>
+                )}
               </div>
             </Card>
           </>
@@ -217,8 +309,10 @@ export function Settings() {
           <h2 className="mt-8 text-sm font-medium text-muted">Default destination for new captures</h2>
           <div className="mt-3 grid grid-cols-3 gap-3">
             <DefaultChip
-              label="Recio"
+              label="Vyooom Cloud"
               active={status.defaultProvider === StorageProvider.FLOWCAP}
+              disabled={!hostedStorage}
+              hint={!hostedStorage ? "Premium plan required" : undefined}
               onClick={() => setDefault(StorageProvider.FLOWCAP)}
             />
             <DefaultChip
@@ -237,7 +331,37 @@ export function Settings() {
         </>
       )}
 
-      <BrandingSection />
+      <section id="branding" style={{ scrollMarginTop: 24 }}>
+        <BrandingSection />
+      </section>
+
+      {/* appearance */}
+      <h2 id="appearance" className="mt-8 text-sm font-medium text-muted" style={{ scrollMarginTop: 24 }}>
+        Appearance
+      </h2>
+      <Card className="mt-3 flex items-center justify-between gap-4 p-4">
+        <div>
+          <p className="text-sm font-medium">Theme</p>
+          <p className="mt-0.5 text-xs text-muted">Light, dark, or match your system setting.</p>
+        </div>
+        <ThemeToggle />
+      </Card>
+
+      {/* account */}
+      <h2 id="account" className="mt-8 text-sm font-medium text-muted" style={{ scrollMarginTop: 24 }}>
+        Account
+      </h2>
+      <Card className="mt-3 flex items-center justify-between p-4">
+        <div>
+          <p className="text-sm font-medium">Profile & security</p>
+          <p className="mt-0.5 text-xs text-muted">Display name, password, and sign-out live on your profile.</p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={() => navigateTop("/profile")}>
+          Open profile
+        </Button>
+      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -279,7 +403,7 @@ function PlanSection() {
         <span
           className={
             "rounded-full px-2 py-0.5 text-[11px] font-semibold " +
-            (isPaid ? "bg-highlight text-[#0A0A0A]" : "bg-bg-primary text-muted ring-1 ring-border")
+            (isPaid ? "bg-highlight text-accent-on" : "bg-bg-primary text-muted ring-1 ring-border")
           }
         >
           {plan}
@@ -356,7 +480,7 @@ function BrandingSection() {
     <>
       <h2 className="mt-8 flex items-center gap-2 text-sm font-medium text-muted">
         Share page branding
-        <span className="rounded-full bg-highlight px-1.5 py-0.5 text-[10px] font-semibold text-[#0A0A0A]">PRO</span>
+        <span className="rounded-full bg-highlight px-1.5 py-0.5 text-[10px] font-semibold text-accent-on">PRO</span>
       </h2>
       <Card className="mt-3 p-4">
         {!isPro && (
@@ -407,11 +531,13 @@ function DefaultChip({
   label,
   active,
   disabled,
+  hint,
   onClick,
 }: {
   label: string;
   active: boolean;
   disabled?: boolean;
+  hint?: string;
   onClick: () => void;
 }) {
   return (
@@ -428,7 +554,7 @@ function DefaultChip({
     >
       <span className="font-medium">{label}</span>
       <span className="mt-0.5 block text-[11px] text-muted">
-        {active ? "Current default" : disabled ? "Connect Drive first" : "Tap to set default"}
+        {active ? "Current default" : disabled ? hint ?? "Connect it first" : "Tap to set default"}
       </span>
     </button>
   );

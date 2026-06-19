@@ -56,7 +56,7 @@ export function MediaCard({ media }: { media: MediaDTO }) {
           <span>{media.viewCount} {media.viewCount === 1 ? "view" : "views"}</span>
           <span className="ml-auto">
             {isPublic ? (
-              <span className="rounded-full bg-highlight px-1.5 py-0.5 font-medium text-[#0A0A0A]">Shared</span>
+              <span className="rounded-full bg-highlight px-1.5 py-0.5 font-medium text-accent-on">Shared</span>
             ) : (
               <span className="rounded-full bg-bg-primary px-1.5 py-0.5 font-medium text-muted ring-1 ring-border">
                 Private
@@ -114,7 +114,7 @@ function Thumbnail({ isRecording, previewUrl }: { isRecording: boolean; previewU
       />
       {/* Kiwi play affordance; fades out on hover while the clip previews. */}
       <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-100 transition-opacity group-hover:opacity-0">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-highlight text-[#0A0A0A] shadow-lg">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-highlight text-accent-on shadow-lg">
           <PlayIcon width={18} height={18} />
         </span>
       </span>

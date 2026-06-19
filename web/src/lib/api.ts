@@ -9,12 +9,20 @@ import type {
   BrandingDTO,
   CheckoutInput,
   CleanupResultDTO,
+  CreateRecordingInput,
   CreateShareInput,
+  FinalizeRecordingInput,
+  InitiateDriveUploadInput,
+  InitiateDriveUploadResult,
+  InitiateDropboxUploadResult,
+  InitiateServerUploadInput,
+  InitiateServerUploadResult,
   InviteDTO,
   MemberDTO,
   RecordViewInput,
   StreamUsageDTO,
   TranscriptDTO,
+  TranscriptWord,
   UpdateBrandingInput,
   WorkspaceDTO,
   LinkVisibility,
@@ -25,6 +33,7 @@ import type {
   PublicShareViewDTO,
   ReactInput,
   ReactionCounts,
+  TimedReaction,
   RecordingDTO,
   ScreenshotDTO,
   StorageConnectionDTO,
@@ -126,6 +135,10 @@ export const api = {
   refresh: () =>
     request<{ accessToken: string; user: UserDTO }>("/auth/refresh", { method: "POST", auth: false }),
   me: () => request<{ user: UserDTO }>("/auth/me"),
+  updateMe: (name: string) =>
+    request<{ user: UserDTO }>("/auth/me", { method: "PATCH", body: { name } }),
+  changePassword: (body: { currentPassword?: string; newPassword: string }) =>
+    request<{ changed: boolean }>("/auth/password", { method: "POST", body }),
   logout: () => request<{ loggedOut: boolean }>("/auth/logout", { method: "POST", auth: false }),
 
   // storage (pass quota:true only where the quota bar is shown — it's a Drive round-trip)
@@ -142,7 +155,7 @@ export const api = {
   listRecordings: (q: Partial<ListMediaQuery>) =>
     request<Paginated<RecordingDTO>>("/recordings", { query: q as Record<string, string> }),
   getRecording: (id: string) =>
-    request<{ recording: RecordingDTO; playbackUrl: string }>(`/recordings/${id}`),
+    request<{ recording: RecordingDTO; playbackUrl: string | null }>(`/recordings/${id}`),
   updateRecording: (id: string, body: UpdateMediaInput) =>
     request<{ recording: RecordingDTO }>(`/recordings/${id}`, { method: "PATCH", body }),
   deleteRecording: (id: string) => request<{ deleted: boolean }>(`/recordings/${id}`, { method: "DELETE" }),
@@ -156,9 +169,26 @@ export const api = {
     request<{ screenshot: ScreenshotDTO }>(`/screenshots/${id}`, { method: "PATCH", body }),
   deleteScreenshot: (id: string) => request<{ deleted: boolean }>(`/screenshots/${id}`, { method: "DELETE" }),
 
+  // upload coordination (web capture → user's storage)
+  initiateDriveUpload: (body: InitiateDriveUploadInput) =>
+    request<InitiateDriveUploadResult>("/upload/drive/initiate", { method: "POST", body }),
+  initiateDropboxUpload: (body: InitiateDriveUploadInput) =>
+    request<InitiateDropboxUploadResult>("/upload/dropbox/initiate", { method: "POST", body }),
+  initiateServerUpload: (body: InitiateServerUploadInput) =>
+    request<InitiateServerUploadResult>("/upload/server", { method: "POST", body }),
+  createRecording: (body: CreateRecordingInput) =>
+    request<{ recording: RecordingDTO }>("/recordings", { method: "POST", body }),
+  finalizeRecording: (id: string, body: FinalizeRecordingInput) =>
+    request<{ recording: RecordingDTO }>(`/recordings/${id}/finalize`, { method: "POST", body }),
+
   // share
   createShare: (body: CreateShareInput) => request<{ shareUrl: string }>("/share", { method: "POST", body }),
   resolveShare: (token: string) => request<PublicShareViewDTO>(`/share/${token}`, { auth: false }),
+  /** Word timestamps for a public share (no auth) — powers viewer captions. */
+  shareTranscript: (token: string) =>
+    request<{ words: TranscriptWord[] | null; text: string | null }>(`/share/${token}/transcript`, {
+      auth: false,
+    }),
   updateSharePermission: (token: string, visibility: LinkVisibility) =>
     request<{ token: string; visibility: LinkVisibility }>(`/share/${token}/permissions`, {
       method: "PATCH",
@@ -166,17 +196,22 @@ export const api = {
     }),
   deleteShare: (token: string) => request<{ revoked: boolean }>(`/share/${token}`, { method: "DELETE" }),
 
-  // reactions (public)
+  // reactions (public) — counts for chips + timestamped timeline for player bursts
   getReactions: (resourceId: string) =>
-    request<{ counts: ReactionCounts }>(`/reactions/${resourceId}`, { auth: false }),
+    request<{ counts: ReactionCounts; timeline: TimedReaction[] }>(`/reactions/${resourceId}`, { auth: false }),
   react: (body: ReactInput) =>
-    request<{ counts: ReactionCounts }>("/reactions", { method: "POST", body, auth: false }),
+    request<{ counts: ReactionCounts; timeline: TimedReaction[] }>("/reactions", { method: "POST", body, auth: false }),
 
   // comments (public read; post optionally authed)
   getComments: (resourceId: string) =>
     request<{ comments: CommentDTO[] }>(`/comments/${resourceId}`, { auth: false }),
   addComment: (body: CreateCommentInput, authed: boolean) =>
     request<{ comment: CommentDTO }>("/comments", { method: "POST", body, auth: authed }),
+  // comment attachments: sign a direct-to-storage upload, then resolve a durable URL
+  signCommentAttachment: (body: { filename: string; contentType?: string }) =>
+    request<{ uploadUrl: string; path: string }>("/comments/attachment/sign", { method: "POST", body }),
+  resolveCommentAttachment: (path: string) =>
+    request<{ url: string }>("/comments/attachment/resolve", { method: "POST", body: { path } }),
 
   // analytics
   recordView: (body: RecordViewInput) =>

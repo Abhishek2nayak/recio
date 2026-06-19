@@ -3,9 +3,10 @@ import { useParams } from "react-router-dom";
 import type { ScreenshotDTO } from "@flowcap/shared";
 import { ApiError, api } from "../lib/api.js";
 import { MediaDetail } from "../components/MediaDetail.js";
+import { MediaView } from "../components/MediaView.js";
 import { DetailError, DetailSkeleton } from "../components/DetailStates.js";
 
-export function ScreenshotView() {
+export function ScreenshotView({ edit = false }: { edit?: boolean }) {
   const { id = "" } = useParams();
   const [screenshot, setScreenshot] = useState<ScreenshotDTO | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState("");
@@ -34,14 +35,18 @@ export function ScreenshotView() {
   if (loading) return <DetailSkeleton />;
   if (error || !screenshot) return <DetailError message={error ?? "Not found."} />;
 
+  const rename = async (title: string) => {
+    const { screenshot: updated } = await api.updateScreenshot(id, { title });
+    setScreenshot(updated);
+  };
+
+  if (!edit) return <MediaView media={screenshot} playbackUrl={playbackUrl} onRename={rename} />;
+
   return (
     <MediaDetail
       media={screenshot}
       playbackUrl={playbackUrl}
-      onRename={async (title) => {
-        const { screenshot: updated } = await api.updateScreenshot(id, { title });
-        setScreenshot(updated);
-      }}
+      onRename={rename}
       onDelete={() => api.deleteScreenshot(id).then(() => undefined)}
     />
   );

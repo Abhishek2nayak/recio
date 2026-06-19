@@ -1,6 +1,6 @@
 /**
  * Renders the media from its playback URL. Every provider — Drive (via our Range
- * proxy), Dropbox, and Recio/Supabase — resolves to a URL a native element can load
+ * proxy), Dropbox, and Vyooom/Supabase — resolves to a URL a native element can load
  * directly. An optional `videoRef` lets the caller drive playback (trim clamp / editor
  * scrubbing).
  */

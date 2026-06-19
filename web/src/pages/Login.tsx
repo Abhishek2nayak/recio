@@ -31,7 +31,7 @@ export function Login() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Sign in to your Recio library."
+      subtitle="Sign in to your Vyooom library."
       footer={
         <>
           New here?{" "}

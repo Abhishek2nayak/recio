@@ -340,6 +340,8 @@ export async function updateRecording(
                 : (input.overlays as unknown as Prisma.InputJsonValue),
           }
         : {}),
+      ...(input.ctaLabel !== undefined ? { ctaLabel: input.ctaLabel } : {}),
+      ...(input.ctaUrl !== undefined ? { ctaUrl: input.ctaUrl } : {}),
       ...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
     },
   });

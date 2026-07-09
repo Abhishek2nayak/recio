@@ -32,6 +32,36 @@ export function upsertShare(params: {
   });
 }
 
+/**
+ * Set privacy fields (passcode hash / expiry) on a link, creating the Share row if the
+ * media only had its default shareToken so far. `undefined` leaves a field unchanged.
+ */
+export function updateShareSettings(params: {
+  userId: string;
+  token: string;
+  resourceType: ResourceType;
+  resourceId: string;
+  passwordHash?: string | null;
+  expiresAt?: Date | null;
+}): Promise<Share> {
+  const { userId, token, resourceType, resourceId, passwordHash, expiresAt } = params;
+  const data: { passwordHash?: string | null; expiresAt?: Date | null } = {};
+  if (passwordHash !== undefined) data.passwordHash = passwordHash;
+  if (expiresAt !== undefined) data.expiresAt = expiresAt;
+  return prisma.share.upsert({
+    where: { token },
+    update: data,
+    create: {
+      token,
+      resourceType,
+      resourceId,
+      createdByUserId: userId,
+      permission: SharePermission.VIEW,
+      ...data,
+    },
+  });
+}
+
 export function getShareByToken(token: string): Promise<Share | null> {
   return prisma.share.findUnique({ where: { token } });
 }

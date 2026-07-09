@@ -7,7 +7,7 @@
  * owner's monthly allowance (entitlements.aiMinutesIncluded).
  */
 import type { Prisma, Recording } from "@prisma/client";
-import { ErrorCode, type TranscriptDTO } from "@flowcap/shared";
+import { ErrorCode, type CaptionCue, type TranscriptDTO } from "@flowcap/shared";
 import { env } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/http-error.js";
@@ -115,6 +115,106 @@ async function summarize(text: string): Promise<{ title: string | null; summary:
   } catch {
     return { title: null, summary: raw.trim() || null };
   }
+}
+
+// ── Caption translation (viewer-facing, cached per recording+language) ──────────
+
+const CUE_MAX_WORDS = 7;
+const CUE_MAX_SECONDS = 4;
+const CUE_GAP_BREAK = 0.8;
+
+/** Group word timestamps into readable caption cues (mirrors the client VTT builder). */
+function groupWordsIntoCues(words: TranscriptWord[]): CaptionCue[] {
+  const cues: CaptionCue[] = [];
+  let group: TranscriptWord[] = [];
+  const flush = () => {
+    if (!group.length) return;
+    const start = group[0]!.start;
+    const end = Math.max(group[group.length - 1]!.end, start + 0.3);
+    cues.push({ start, end, text: group.map((w) => w.word).join(" ") });
+    group = [];
+  };
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]!;
+    const prev = words[i - 1];
+    const gap = prev ? w.start - prev.end : 0;
+    if (group.length && (group.length >= CUE_MAX_WORDS || w.end - group[0]!.start > CUE_MAX_SECONDS || gap > CUE_GAP_BREAK)) {
+      flush();
+    }
+    group.push(w);
+  }
+  flush();
+  return cues;
+}
+
+/** Translate a batch of cue strings into `langLabel` via Claude; falls back to source on any issue. */
+async function translateBatch(lines: string[], langLabel: string): Promise<string[]> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4000,
+      messages: [
+        {
+          role: "user",
+          content:
+            `Translate each string in this JSON array into ${langLabel}. ` +
+            "Return ONLY a JSON array of the same length and order — translated strings, no notes.\n\n" +
+            JSON.stringify(lines),
+        },
+      ],
+    }),
+  });
+  if (!res.ok) return lines;
+  const json = (await res.json()) as { content?: { text?: string }[] };
+  const raw = json.content?.[0]?.text ?? "";
+  try {
+    const arr = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1)) as string[];
+    return arr.length === lines.length ? arr : lines;
+  } catch {
+    return lines;
+  }
+}
+
+/**
+ * Return AI-translated caption cues for a recording, building + caching them on first
+ * request for each language. Public/viewer-facing; safe to call without auth.
+ */
+export async function getOrCreateTranslation(recordingId: string, lang: string, langLabel: string): Promise<CaptionCue[]> {
+  const cached = await prisma.transcriptTranslation.findUnique({
+    where: { recordingId_lang: { recordingId, lang } },
+  });
+  if (cached) return cached.cues as unknown as CaptionCue[];
+
+  const t = await prisma.transcript.findUnique({ where: { recordingId } });
+  if (!t || t.status !== "READY" || !t.words) {
+    throw new HttpError(ErrorCode.NOT_FOUND, "No captions available to translate yet.");
+  }
+  if (!env.ANTHROPIC_API_KEY) {
+    throw new HttpError(ErrorCode.INTERNAL_ERROR, "Translation isn't enabled.");
+  }
+
+  const cues = groupWordsIntoCues(t.words as unknown as TranscriptWord[]);
+  if (!cues.length) return [];
+
+  const texts = cues.map((c) => c.text);
+  const translated: string[] = [];
+  const BATCH = 60;
+  for (let i = 0; i < texts.length; i += BATCH) {
+    translated.push(...(await translateBatch(texts.slice(i, i + BATCH), langLabel)));
+  }
+  const out = cues.map((c, i) => ({ ...c, text: translated[i] ?? c.text }));
+
+  // Cache (ignore races on the unique key).
+  await prisma.transcriptTranslation
+    .create({ data: { recordingId, lang, cues: out as unknown as Prisma.InputJsonValue } })
+    .catch(() => undefined);
+  return out;
 }
 
 /** Generate (or regenerate) a transcript + summary for an owned recording. */

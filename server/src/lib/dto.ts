@@ -68,6 +68,8 @@ export function toRecordingDTO(r: Recording): RecordingDTO {
     trimEndSec: r.trimEndSec,
     cuts: (r.cuts as unknown as RecordingDTO["cuts"]) ?? null,
     overlays: (r.overlays as unknown as RecordingDTO["overlays"]) ?? null,
+    ctaLabel: r.ctaLabel,
+    ctaUrl: r.ctaUrl,
     shareToken: r.shareToken,
     isPublic: r.isPublic,
     visibility: r.isPublic ? LinkVisibility.PUBLIC : LinkVisibility.PRIVATE,

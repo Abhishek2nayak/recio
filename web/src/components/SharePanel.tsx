@@ -8,8 +8,16 @@ import * as Switch from "@radix-ui/react-switch";
 import { clsx } from "clsx";
 import { StorageProvider } from "@flowcap/shared";
 import { useDrivePermission } from "../hooks/useDrivePermission.js";
+import { api, ApiError } from "../lib/api.js";
 import { Button } from "./ui.js";
 import { CheckIcon, CopyIcon } from "./icons.js";
+
+const EXPIRY_PRESETS: { label: string; days: number | null }[] = [
+  { label: "Never", days: null },
+  { label: "1 day", days: 1 },
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
+];
 
 export function SharePanel({
   shareToken,
@@ -25,6 +33,38 @@ export function SharePanel({
   const { setVisibility, pending, error } = useDrivePermission();
   const [copied, setCopied] = useState(false);
   const shareUrl = `${window.location.origin}/s/${shareToken}`;
+
+  // Privacy pack — passcode + expiry (owner-only controls).
+  const [pw, setPw] = useState("");
+  const [hasPassword, setHasPassword] = useState(false);
+  const [expiryDays, setExpiryDays] = useState<number | null>(null);
+  const [savingPw, setSavingPw] = useState(false);
+  const [privacyErr, setPrivacyErr] = useState<string | null>(null);
+
+  async function savePassword(clear = false) {
+    setSavingPw(true);
+    setPrivacyErr(null);
+    try {
+      await api.updateShareSettings(shareToken, { password: clear ? null : pw });
+      setHasPassword(!clear);
+      setPw("");
+    } catch (e) {
+      setPrivacyErr(e instanceof ApiError ? e.message : "Couldn't update passcode.");
+    } finally {
+      setSavingPw(false);
+    }
+  }
+
+  async function saveExpiry(days: number | null) {
+    setExpiryDays(days);
+    setPrivacyErr(null);
+    const expiresAt = days == null ? null : new Date(Date.now() + days * 86400_000).toISOString();
+    try {
+      await api.updateShareSettings(shareToken, { expiresAt });
+    } catch (e) {
+      setPrivacyErr(e instanceof ApiError ? e.message : "Couldn't update expiry.");
+    }
+  }
 
   async function toggle(next: boolean) {
     onChange(next); // optimistic
@@ -81,6 +121,56 @@ export function SharePanel({
           {copied ? "Copied" : "Copy"}
         </Button>
       </div>
+
+      {/* Privacy: passcode + expiry (only meaningful while the link is on) */}
+      {isPublic && (
+        <div className="flex flex-col gap-3 border-t border-border pt-4">
+          {/* Passcode */}
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium text-text-primary">
+              Passcode {hasPassword && <span className="text-[11px] font-normal text-accent">· protected</span>}
+            </span>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                placeholder={hasPassword ? "Enter a new passcode" : "Add a passcode"}
+                className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none"
+              />
+              <Button variant="secondary" size="sm" onClick={() => savePassword(false)} disabled={savingPw || !pw.trim()}>
+                {savingPw ? "Saving…" : "Set"}
+              </Button>
+              {hasPassword && (
+                <Button variant="ghost" size="sm" onClick={() => savePassword(true)} disabled={savingPw}>
+                  Remove
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Expiry */}
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium text-text-primary">Link expires</span>
+            <div className="flex gap-2">
+              {EXPIRY_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  onClick={() => saveExpiry(p.days)}
+                  className={clsx(
+                    "flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                    expiryDays === p.days ? "border-accent bg-accent/10 text-accent" : "border-border text-muted hover:text-text-primary",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {privacyErr && <p className="text-xs text-danger">{privacyErr}</p>}
+        </div>
+      )}
 
       {error && <p className="text-xs text-danger">{error}</p>}
     </div>

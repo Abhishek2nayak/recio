@@ -33,7 +33,9 @@ import type {
   PublicShareViewDTO,
   ReactInput,
   ReactionCounts,
+  ShareDTO,
   TimedReaction,
+  TranslatedCaptionsDTO,
   RecordingDTO,
   ScreenshotDTO,
   StorageConnectionDTO,
@@ -194,7 +196,19 @@ export const api = {
       method: "PATCH",
       body: { visibility },
     }),
+  /** Owner: set/clear a viewer passcode and/or link expiry (Privacy pack). */
+  updateShareSettings: (token: string, body: { password?: string | null; expiresAt?: string | null }) =>
+    request<{ share: ShareDTO }>(`/share/${token}/settings`, { method: "PATCH", body }),
+  /** Viewer: open a password-gated link (no auth). Returns the full share view. */
+  unlockShare: (token: string, password: string) =>
+    request<PublicShareViewDTO>(`/share/${token}/unlock`, { method: "POST", body: { password }, auth: false }),
+  /** Viewer: request AI-translated captions for a public share (no auth). */
+  translateShare: (token: string, lang: string) =>
+    request<TranslatedCaptionsDTO>(`/share/${token}/translate`, { method: "POST", body: { lang }, auth: false }),
   deleteShare: (token: string) => request<{ revoked: boolean }>(`/share/${token}`, { method: "DELETE" }),
+  /** Relay a share link to Slack/Discord via the user's incoming webhook (no auth). */
+  notifyShare: (body: { provider: "slack" | "discord"; webhookUrl: string; title: string; url: string; note?: string }) =>
+    request<{ sent: boolean }>("/share/notify", { method: "POST", body, auth: false }),
 
   // reactions (public) — counts for chips + timestamped timeline for player bursts
   getReactions: (resourceId: string) =>

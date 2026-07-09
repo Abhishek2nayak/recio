@@ -11,7 +11,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@excalidraw/excalidraw": "^0.18.1",
     "@flowcap/shared": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-dropdown-menu": "^2.1.4",

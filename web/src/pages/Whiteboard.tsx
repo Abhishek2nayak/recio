@@ -1,14 +1,13 @@
 /**
- * Excalidraw whiteboard page. Mounts the real Excalidraw component filling the main
- * area, themed light to match the app. A bottom recorder dock captures the screen
- * (the browser picker lets you choose a tab, window, or the whole screen) and saves
- * the result; the public `/whiteboard/embed` route stays chrome-less for the
- * extension studio to embed.
+ * Whiteboard page. Mounts our in-house canvas (WhiteboardCanvas — pen/shapes/text/
+ * eraser, no third-party dependency) filling the main area. A bottom recorder dock
+ * captures the screen (the browser picker lets you choose a tab, window, or the whole
+ * screen) and saves the result; the public `/whiteboard/embed` route stays chrome-less
+ * for the extension studio to embed.
  */
 import { useEffect, useRef, useState } from "react";
-import { Excalidraw } from "@excalidraw/excalidraw";
-import "@excalidraw/excalidraw/index.css";
 import { StorageProvider } from "@flowcap/shared";
+import { WhiteboardCanvas } from "../components/WhiteboardCanvas.js";
 import { api } from "../lib/api.js";
 import { publishWebRecording } from "../lib/webPublish.js";
 import { useAuthStore } from "../stores/authStore.js";
@@ -115,8 +114,8 @@ export function Whiteboard() {
 
   if (embed) {
     return (
-      <div className="h-screen w-screen">
-        <Excalidraw theme="light" name="Vyooom whiteboard" />
+      <div className="relative h-screen w-screen">
+        <WhiteboardCanvas theme="light" />
       </div>
     );
   }
@@ -137,7 +136,7 @@ export function Whiteboard() {
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <Excalidraw theme="light" name="Vyooom whiteboard" />
+        <WhiteboardCanvas theme="light" />
 
         {/* bottom recorder dock */}
         {phase !== "idle" && (

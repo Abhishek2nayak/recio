@@ -4,20 +4,23 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  CAPTION_LANGUAGES,
   REACTION_EMOJIS,
   ResourceType,
   formatDuration,
   type PublicShareViewDTO,
   type TimedReaction,
+  type TranscriptWord,
 } from "@flowcap/shared";
 import { ApiError, api } from "../lib/api.js";
-import { vttUrl } from "../lib/vtt.js";
+import { vttUrl, vttUrlFromCues } from "../lib/vtt.js";
 import { VideoPlayer, type TimelineComment } from "../components/VideoPlayer/VideoPlayer.js";
 import { useViewTracker } from "../hooks/useViewTracker.js";
 import { useTrimClamp } from "../hooks/useTrimClamp.js";
 import { useSkipSegments } from "../hooks/useSkipSegments.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { Comments } from "../components/Comments.js";
+import { ShareMenu } from "../components/ShareMenu.js";
 import { Avatar, Chip, IconBtn, Logo, OverlayLayer, RButton, Tag } from "../components/recio/index.js";
 import { Icons, ReticleMark } from "../components/recio/icons.js";
 
@@ -103,9 +106,11 @@ export function SharePage() {
       </header>
 
       {status === "loading" && <Centered>Loading…</Centered>}
+      {/* Password-gated link: show the unlock gate until the viewer enters the passcode. */}
+      {status === "ok" && view?.locked && <PasswordGate token={token} onUnlock={setView} />}
       {/* Remount when processing flips so the video-bound effects (view tracking,
           trim clamp, captions) re-attach to the freshly mounted <video>. */}
-      {status === "ok" && view && (
+      {status === "ok" && view && !view.locked && (
         <ShareViewer key={view.processing ? "processing" : "ready"} view={view} token={token} />
       )}
       {status === "gone" && <Notice title="This link is turned off" body="The owner has made this private." />}
@@ -123,6 +128,11 @@ function ShareViewer({ view, token }: { view: PublicShareViewDTO; token: string 
   const [shared, setShared] = useState(false);
   const [vtime, setVtime] = useState(0);
   const [captionsUrl, setCaptionsUrl] = useState<string | null>(null);
+  const [captionLang, setCaptionLang] = useState("");
+  const [translating, setTranslating] = useState(false);
+  const [hasCaptions, setHasCaptions] = useState(false);
+  const wordsRef = useRef<TranscriptWord[]>([]);
+  const capUrlRef = useRef<string | null>(null);
   const [timeline, setTimeline] = useState<TimedReaction[]>([]);
   const [markers, setMarkers] = useState<TimelineComment[]>([]);
   const overlays = view.overlays ?? [];
@@ -130,24 +140,54 @@ function ShareViewer({ view, token }: { view: PublicShareViewDTO; token: string 
   useTrimClamp(videoRef, view.trimStartSec, view.trimEndSec);
   useSkipSegments(videoRef, view.cuts);
 
+  // Swap the caption track, revoking the previous blob URL.
+  function applyCaptions(url: string | null) {
+    if (capUrlRef.current) URL.revokeObjectURL(capUrlRef.current);
+    capUrlRef.current = url;
+    setCaptionsUrl(url);
+  }
+
   // Captions from the recording's transcript (word timestamps → WebVTT track).
   useEffect(() => {
     if (!isRecording || view.processing) return;
-    let url: string | null = null;
     let cancelled = false;
     api
       .shareTranscript(token)
       .then(({ words }) => {
         if (cancelled || !words?.length) return;
-        url = vttUrl(words);
-        setCaptionsUrl(url);
+        wordsRef.current = words;
+        setHasCaptions(true);
+        if (captionLang === "") applyCaptions(vttUrl(words));
       })
       .catch(() => {});
     return () => {
       cancelled = true;
-      if (url) URL.revokeObjectURL(url);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRecording, view.processing, token]);
+
+  // Revoke the last caption blob on unmount.
+  useEffect(() => () => {
+    if (capUrlRef.current) URL.revokeObjectURL(capUrlRef.current);
+  }, []);
+
+  // Viewer picks a caption language → original words or AI-translated cues.
+  async function changeCaptionLang(code: string) {
+    setCaptionLang(code);
+    if (code === "") {
+      applyCaptions(wordsRef.current.length ? vttUrl(wordsRef.current) : null);
+      return;
+    }
+    setTranslating(true);
+    try {
+      const { cues } = await api.translateShare(token, code);
+      applyCaptions(cues.length ? vttUrlFromCues(cues) : null);
+    } catch {
+      /* keep current captions on failure */
+    } finally {
+      setTranslating(false);
+    }
+  }
 
   // Timeline data for the player: emoji bursts + comment markers.
   useEffect(() => {
@@ -261,10 +301,41 @@ function ShareViewer({ view, token }: { view: PublicShareViewDTO; token: string 
           {!view.processing && overlays.length > 0 && <OverlayLayer overlays={overlays} time={vtime} />}
         </div>
 
-        {view.branding?.ctaLabel && view.branding.ctaUrl && (
-          <a href={view.branding.ctaUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block", marginTop: 12 }}>
+        {isRecording && hasCaptions && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12.5, color: "var(--ink-3)" }}>
+            <Icons.Globe size={15} />
+            <span>Captions</span>
+            <select
+              value={captionLang}
+              onChange={(e) => void changeCaptionLang(e.target.value)}
+              disabled={translating}
+              style={{
+                height: 30,
+                borderRadius: "var(--r)",
+                border: "1px solid var(--line-2)",
+                background: "var(--surface-2)",
+                color: "var(--ink-2)",
+                fontSize: 12.5,
+                padding: "0 8px",
+                outline: "none",
+                cursor: "pointer",
+              }}
+            >
+              <option value="">Original</option>
+              {CAPTION_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            {translating && <span style={{ color: "var(--ink-4)" }}>Translating…</span>}
+          </div>
+        )}
+
+        {view.cta && (
+          <a href={view.cta.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block", marginTop: 12 }}>
             <RButton variant="primary" size="lg" full iconRight={Icons.ArrowR}>
-              {view.branding.ctaLabel}
+              {view.cta.label}
             </RButton>
           </a>
         )}
@@ -331,14 +402,14 @@ function ShareViewer({ view, token }: { view: PublicShareViewDTO; token: string 
 
       {/* right rail */}
       <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <ShareCard permission={view.permission} url={canonicalUrl} />
+        <ShareCard permission={view.permission} url={canonicalUrl} title={view.title} />
         <CloudCard ownerName={view.ownerName} title={view.title} />
       </aside>
     </div>
   );
 }
 
-function ShareCard({ permission, url }: { permission: string; url: string }) {
+function ShareCard({ permission, url, title }: { permission: string; url: string; title: string }) {
   const [copied, setCopied] = useState(false);
   const display = url.replace(/^https?:\/\//, "");
 
@@ -382,6 +453,9 @@ function ShareCard({ permission, url }: { permission: string; url: string }) {
           {copied ? "Copied" : "Copy"}
         </RButton>
       </div>
+      <div style={{ marginBottom: 14 }}>
+        <ShareMenu url={url} title={title} />
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {ACCESS.map(([id, Ico, label, sub]) => {
           const on = active === id;
@@ -411,6 +485,73 @@ function ShareCard({ permission, url }: { permission: string; url: string }) {
         })}
       </div>
     </div>
+  );
+}
+
+function PasswordGate({ token, onUnlock }: { token: string; onUnlock: (v: PublicShareViewDTO) => void }) {
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pw.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const v = await api.unlockShare(token, pw);
+      onUnlock(v);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't unlock.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Centered>
+      <form
+        onSubmit={submit}
+        style={{
+          width: 360,
+          maxWidth: "90vw",
+          background: "var(--surface)",
+          border: "1px solid var(--line)",
+          borderRadius: "var(--r-lg)",
+          padding: 24,
+          boxShadow: "var(--e1)",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 12, color: "var(--accent-ink)" }}>
+          <Icons.Shield size={34} />
+        </div>
+        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>This video is protected</h2>
+        <p style={{ margin: "6px 0 16px", fontSize: 13, color: "var(--ink-3)" }}>Enter the passcode to watch.</p>
+        <input
+          type="password"
+          autoFocus
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          placeholder="Passcode"
+          style={{
+            width: "100%",
+            height: 42,
+            borderRadius: "var(--r)",
+            border: "1px solid var(--line-2)",
+            background: "var(--surface-2)",
+            padding: "0 14px",
+            fontSize: 14,
+            color: "var(--ink)",
+            outline: "none",
+            marginBottom: 12,
+          }}
+        />
+        {error && <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--danger)" }}>{error}</p>}
+        <RButton type="submit" variant="primary" full disabled={busy}>
+          {busy ? "Unlocking…" : "Unlock"}
+        </RButton>
+      </form>
+    </Centered>
   );
 }
 

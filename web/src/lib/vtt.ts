@@ -46,3 +46,15 @@ export function buildVtt(words: TranscriptWord[]): string {
 export function vttUrl(words: TranscriptWord[]): string {
   return URL.createObjectURL(new Blob([buildVtt(words)], { type: "text/vtt" }));
 }
+
+/** Build a WebVTT track from pre-grouped cues (e.g. AI-translated captions). */
+export function buildVttFromCues(cues: { start: number; end: number; text: string }[]): string {
+  const body = cues
+    .map((c) => `${ts(c.start)} --> ${ts(Math.max(c.end, c.start + 0.3))}\n${c.text}`)
+    .join("\n\n");
+  return `WEBVTT\n\n${body}\n`;
+}
+
+export function vttUrlFromCues(cues: { start: number; end: number; text: string }[]): string {
+  return URL.createObjectURL(new Blob([buildVttFromCues(cues)], { type: "text/vtt" }));
+}

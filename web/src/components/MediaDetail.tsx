@@ -412,6 +412,13 @@ export function MediaDetail({
             ) : (
               <>
                 <SharePanel shareToken={media.shareToken} isPublic={isPublic} provider={media.storageProvider} onChange={setIsPublic} />
+                {isRecording && (
+                  <CtaEditor
+                    mediaId={media.id}
+                    initialLabel={(media as RecordingDTO).ctaLabel}
+                    initialUrl={(media as RecordingDTO).ctaUrl}
+                  />
+                )}
                 <AnalyticsPanel mediaId={media.id} />
                 <MoveToWorkspace media={media} />
                 <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
@@ -814,6 +821,58 @@ const timeInput: React.CSSProperties = {
 };
 
 /* ── reused functional panels (Tailwind, auto-themed) ───────────────────────── */
+function CtaEditor({ mediaId, initialLabel, initialUrl }: { mediaId: string; initialLabel: string | null; initialUrl: string | null }) {
+  const [label, setLabel] = useState(initialLabel ?? "");
+  const [url, setUrl] = useState(initialUrl ?? "");
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [err, setErr] = useState<string | null>(null);
+  const dirty = label !== (initialLabel ?? "") || url !== (initialUrl ?? "");
+
+  async function save() {
+    setState("saving");
+    setErr(null);
+    try {
+      const hasBoth = label.trim() && url.trim();
+      await api.updateRecording(mediaId, {
+        ctaLabel: hasBoth ? label.trim() : null,
+        ctaUrl: hasBoth ? url.trim() : null,
+      });
+      setState("saved");
+      setTimeout(() => setState("idle"), 1500);
+    } catch (e) {
+      setState("error");
+      setErr(e instanceof ApiError ? e.message : "Couldn't save. Check the URL.");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium">Call to action</h3>
+        {state === "saved" && <span className="text-[11px] text-accent">Saved</span>}
+      </div>
+      <p className="text-xs text-muted">A button shown under the video on the share page.</p>
+      <input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder="Button text — e.g. Book a demo"
+        maxLength={60}
+        className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none"
+      />
+      <input
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://…"
+        className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none"
+      />
+      {err && <p className="text-xs text-danger">{err}</p>}
+      <RButton variant="soft" size="sm" onClick={save} disabled={state === "saving" || !dirty}>
+        {state === "saving" ? "Saving…" : label.trim() || url.trim() ? "Save CTA" : "Remove CTA"}
+      </RButton>
+    </div>
+  );
+}
+
 function AnalyticsPanel({ mediaId }: { mediaId: string }) {
   const navigate = useNavigate();
   const [data, setData] = useState<AnalyticsDTO | null>(null);

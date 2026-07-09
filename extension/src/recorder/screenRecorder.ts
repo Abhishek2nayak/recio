@@ -46,6 +46,7 @@ export class ScreenRecorder {
   private pausedMs = 0;
   private lastPauseAt = 0;
   private mimeType = "video/webm";
+  private videoBitsPerSecond = 0;
   private settled = false;
   private result: RecordingResult | null = null;
   private pendingResolve: ((r: RecordingResult) => void) | null = null;
@@ -70,7 +71,7 @@ export class ScreenRecorder {
 
     const videoConstraints: MediaTrackConstraints = {
       // For whiteboard mode we don't bias toward the monitor — the current tab
-      // (the Excalidraw canvas) should be the default pick.
+      // (the Vyooom whiteboard canvas) should be the default pick.
       ...(options.preferCurrentTab ? {} : ({ displaySurface: "monitor" } as MediaTrackConstraints)),
       ...(options.frameRate ? { frameRate: { ideal: options.frameRate } } : {}),
     };
@@ -87,6 +88,7 @@ export class ScreenRecorder {
     const combined = new MediaStream([...this.displayStream.getVideoTracks(), ...audioTracks]);
 
     this.mimeType = pickMimeType();
+    this.videoBitsPerSecond = options.videoBitsPerSecond ?? 0;
     this.recorder = new MediaRecorder(combined, {
       mimeType: this.mimeType,
       ...(options.videoBitsPerSecond ? { videoBitsPerSecond: options.videoBitsPerSecond } : {}),
@@ -145,6 +147,39 @@ export class ScreenRecorder {
       this.recorder.resume();
       this.pausedMs += performance.now() - this.lastPauseAt;
     }
+  }
+
+  /**
+   * Throw away what's recorded so far and start a fresh take on the SAME display
+   * stream — no second surface picker (the gesture's already spent). Used by the
+   * dock's "Restart" control, mirroring Loom's live re-record.
+   */
+  restart(): void {
+    if (!this.recorder) return;
+    // Drop the in-flight take without finalizing it.
+    if (this.recorder.state !== "inactive") {
+      this.recorder.onstop = null;
+      this.recorder.stop();
+    }
+    // Rebuild a recorder over the still-live combined stream so we keep capturing
+    // the same surface (+ mic mix) we already negotiated in prepare().
+    const stream = this.recorder.stream;
+    this.recorder = new MediaRecorder(stream, {
+      mimeType: this.mimeType,
+      ...(this.videoBitsPerSecond ? { videoBitsPerSecond: this.videoBitsPerSecond } : {}),
+    });
+    this.chunks = [];
+    this.recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) this.chunks.push(e.data);
+    };
+    this.recorder.onstop = () => this.settle();
+    this.settled = false;
+    this.result = null;
+    this.pendingResolve = null;
+    this.recorder.start(1000);
+    this.startedAt = performance.now();
+    this.pausedMs = 0;
+    this.lastPauseAt = 0;
   }
 
   get state(): "inactive" | "recording" | "paused" {

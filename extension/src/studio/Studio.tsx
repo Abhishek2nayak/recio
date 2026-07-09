@@ -12,7 +12,7 @@ import { ScreenRecorder, type RecordingResult } from "../recorder/screenRecorder
 import { publishCapture } from "../storage/publish.js";
 import { deletePending, getPending, type PendingUpload } from "../lib/pendingUploads.js";
 import { StorageBadge } from "../components/ui.js";
-import { Icons, IconBtn, Logo, RButton, ReticleMark, Tag, Toggle, Waveform } from "../components/recio/index.js";
+import { Icons, IconBtn, Logo, RButton, ReticleMark, Tag, Toggle, Waveform, type IconComponent } from "../components/recio/index.js";
 import { useFlowcap } from "../lib/useFlowcap.js";
 import {
   getSettings,
@@ -25,6 +25,8 @@ import {
   type Settings,
 } from "../lib/storage.js";
 import { sendMessage, type Message } from "../lib/messages.js";
+import { CameraCompositor, BG_PRESETS } from "../camera/effects.js";
+import type { CameraEffect, CameraFilter, CameraFrame } from "../lib/storage.js";
 import { config } from "../config.js";
 
 type Phase = "loading" | "need-auth" | "idle" | "countdown" | "recording" | "paused" | "uploading" | "done" | "error" | "recover";
@@ -60,7 +62,7 @@ function defaultTitle(): string {
   return `Recording — ${stamp}`;
 }
 
-/** "whiteboard" → record the embedded Excalidraw canvas; default "screen". */
+/** "whiteboard" → record the embedded Vyooom whiteboard canvas; default "screen". */
 const recordMode: "screen" | "whiteboard" =
   new URLSearchParams(window.location.search).get("mode") === "whiteboard" ? "whiteboard" : "screen";
 
@@ -82,6 +84,8 @@ export function Studio() {
   const [error, setError] = useState<string | null>(null);
   const captureRef = useRef<CaptureInHand | null>(null);
   const [hasCapture, setHasCapture] = useState(false);
+  // Which footer panel is open on the idle screen (Loom-style Effects / Blur / More).
+  const [panel, setPanel] = useState<null | "effects" | "blur" | "more">(null);
 
   useEffect(() => {
     if (ctx.loading) return;
@@ -133,13 +137,15 @@ export function Studio() {
     return () => clearInterval(t);
   }, [phase]);
 
-  const controlRef = useRef({ pause: () => {}, resume: () => {}, stop: () => {} });
+  const controlRef = useRef({ pause: () => {}, resume: () => {}, stop: () => {}, restart: () => {}, cancel: () => {} });
   useEffect(() => {
     const listener = (msg: Message) => {
       if (msg.type === "RECORDING_CONTROL") {
         if (msg.action === "pause") controlRef.current.pause();
         if (msg.action === "resume") controlRef.current.resume();
         if (msg.action === "stop") controlRef.current.stop();
+        if (msg.action === "restart") controlRef.current.restart();
+        if (msg.action === "cancel") controlRef.current.cancel();
       }
     };
     chrome.runtime.onMessage.addListener(listener);
@@ -199,6 +205,11 @@ export function Studio() {
   }
   function resume() {
     recorderRef.current?.resume();
+    setPhase("recording");
+  }
+  function restart() {
+    recorderRef.current?.restart();
+    setElapsed(0);
     setPhase("recording");
   }
   function cancel() {
@@ -286,7 +297,7 @@ export function Studio() {
     setTimeout(() => setCopied(false), 1500);
   }
 
-  controlRef.current = { pause, resume, stop: () => void stop() };
+  controlRef.current = { pause, resume, stop: () => void stop(), restart, cancel };
 
   // ── Render ──
   if (phase === "loading" || ctx.loading) {
@@ -393,7 +404,7 @@ export function Studio() {
               gap: 12,
             }}
           >
-            <CameraPreview on={settings.camera} deviceId={settings.cameraDeviceId} size={settings.cameraSize} />
+            <CameraPreview on={settings.camera} deviceId={settings.cameraDeviceId} size={settings.cameraSize} settings={settings} />
             <MicMeter on={settings.microphone} deviceId={settings.micDeviceId} />
 
             {settings.camera && (
@@ -492,6 +503,40 @@ export function Studio() {
           <RButton variant="primary" size="lg" full icon={Icons.Reticle} onClick={start}>
             Start recording
           </RButton>
+
+          {/* Loom-style footer: Effects · Blur · More */}
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 12 }}>
+            <FooterChip icon={Icons.Cam} label="Effects" active={panel === "effects"} onClick={() => setPanel((p) => (p === "effects" ? null : "effects"))} />
+            <FooterChip icon={Icons.Blur} label="Blur" active={panel === "blur"} onClick={() => setPanel((p) => (p === "blur" ? null : "blur"))} />
+            <FooterChip icon={Icons.More} label="More" active={panel === "more"} onClick={() => setPanel((p) => (p === "more" ? null : "more"))} />
+          </div>
+
+          {panel === "effects" && <EffectsPanel settings={settings} onChange={(p) => void updateSetting(p)} />}
+          {panel === "blur" && (
+            <div style={panelBox}>
+              <p style={{ margin: 0, fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.55 }}>
+                <strong style={{ color: "var(--ink)" }}>Blur sensitive areas live.</strong> Once you start recording,
+                open the <Icons.Blur size={12} /> <strong>Blur</strong> tool in the on-page control dock — drag a box or
+                click an element (a password, an email, a customer name) to hide it. The blur is baked into the video and
+                can't be removed afterwards, just like the real thing.
+              </p>
+            </div>
+          )}
+          {panel === "more" && (
+            <div style={panelBox}>
+              <ToggleLine
+                label="Recording countdown"
+                hint="3-2-1 before recording starts"
+                on={settings.countdown}
+                onToggle={(v) => void updateSetting({ countdown: v })}
+              />
+              <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
+              <p style={{ margin: 0, fontSize: 11.5, color: "var(--ink-4)", lineHeight: 1.5 }}>
+                Draw &amp; annotate are available in the on-page dock while recording (pen, arrow, box, highlighter).
+              </p>
+            </div>
+          )}
+
           <p style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, marginTop: 14, fontSize: 12, color: "var(--ink-4)" }}>
             Saves to <StorageBadge provider={ctx.defaultDestination} /> automatically
           </p>
@@ -553,6 +598,7 @@ export function Studio() {
             onStop={() => void stop()}
             onToggle={phase === "recording" ? pause : resume}
             onCancel={cancel}
+            onRestart={restart}
           />
           <p style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-4)", margin: 0 }}>
             Saves to <StorageBadge provider={ctx.defaultDestination} /> automatically
@@ -752,9 +798,191 @@ function chipStyle(on: boolean): React.CSSProperties {
   };
 }
 
-/** Live circular webcam preview, scaled to reflect the chosen bubble size. */
-function CameraPreview({ on, deviceId, size }: { on: boolean; deviceId: string; size: CameraSize }) {
-  const ref = useRef<HTMLVideoElement | null>(null);
+const panelBox: React.CSSProperties = {
+  marginTop: 10,
+  padding: 14,
+  borderRadius: "var(--r-lg)",
+  border: "1px solid var(--line)",
+  background: "var(--surface)",
+  boxShadow: "var(--e1)",
+  animation: "r-fade-up var(--t2, 220ms) var(--ease, ease) both",
+};
+
+/** Footer pill button (Effects / Blur / More) on the idle panel. */
+function FooterChip({ icon: Ico, label, active, onClick }: { icon: IconComponent; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        height: 36,
+        padding: "0 14px",
+        borderRadius: "var(--r-pill)",
+        border: "1.5px solid",
+        borderColor: active ? "var(--accent)" : "var(--line)",
+        background: active ? "var(--accent-soft)" : "var(--surface)",
+        color: active ? "var(--accent-ink)" : "var(--ink-2)",
+        fontSize: 12.5,
+        fontWeight: 600,
+        cursor: "pointer",
+        fontFamily: "var(--sans)",
+      }}
+    >
+      <Ico size={15} /> {label}
+    </button>
+  );
+}
+
+function ToggleLine({ label, hint, on, onToggle }: { label: string; hint: string; on: boolean; onToggle: (v: boolean) => void }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+      <span>
+        <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{label}</span>
+        <span style={{ display: "block", fontSize: 11.5, color: "var(--ink-4)" }}>{hint}</span>
+      </span>
+      <Toggle on={on} onChange={() => onToggle(!on)} />
+    </div>
+  );
+}
+
+/** Camera background + filter + frame picker (Loom-style "Effects"). */
+function EffectsPanel({ settings, onChange }: { settings: Settings; onChange: (p: Partial<Settings>) => void }) {
+  const effects: { id: CameraEffect; label: string }[] = [
+    { id: "none", label: "None" },
+    { id: "blur", label: "Blur" },
+    { id: "image", label: "Background" },
+    { id: "color", label: "Color" },
+  ];
+  const filters: { id: CameraFilter; label: string }[] = [
+    { id: "none", label: "Normal" },
+    { id: "touchup", label: "Touch up" },
+    { id: "mono", label: "Mono" },
+    { id: "warm", label: "Warm" },
+    { id: "cool", label: "Cool" },
+    { id: "vivid", label: "Vivid" },
+  ];
+  const frames: { id: CameraFrame; label: string }[] = [
+    { id: "none", label: "None" },
+    { id: "ring", label: "Ring" },
+    { id: "soft", label: "Soft" },
+  ];
+  const colors = ["#0B1220", "#111113", "#1E3A8A", "#0F766E", "#9D174D", "#B45309"];
+
+  return (
+    <div style={panelBox}>
+      {!settings.camera && (
+        <p style={{ margin: "0 0 10px", fontSize: 11.5, color: "var(--warning)" }}>
+          Turn the camera on to use background effects.
+        </p>
+      )}
+      <SubLabel>Background</SubLabel>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+        {effects.map((e) => (
+          <PickChip key={e.id} label={e.label} on={settings.cameraEffect === e.id} onClick={() => onChange({ cameraEffect: e.id })} />
+        ))}
+      </div>
+
+      {settings.cameraEffect === "image" && (
+        <>
+          <SubLabel>Scene</SubLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+            {Object.keys(BG_PRESETS).map((id) => (
+              <button
+                key={id}
+                onClick={() => onChange({ cameraBgImage: id })}
+                title={id}
+                style={{
+                  height: 34,
+                  borderRadius: "var(--r)",
+                  border: settings.cameraBgImage === id ? "2px solid var(--accent)" : "1.5px solid var(--line)",
+                  cursor: "pointer",
+                  background: `linear-gradient(135deg, ${BG_PRESETS[id]![0]}, ${BG_PRESETS[id]![1]} 55%, ${BG_PRESETS[id]![2]})`,
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {settings.cameraEffect === "color" && (
+        <>
+          <SubLabel>Color</SubLabel>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {colors.map((c) => (
+              <button
+                key={c}
+                onClick={() => onChange({ cameraBgColor: c })}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  cursor: "pointer",
+                  background: c,
+                  border: settings.cameraBgColor === c ? "2px solid var(--accent)" : "2px solid var(--line)",
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      <SubLabel>Filter</SubLabel>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+        {filters.map((f) => (
+          <PickChip key={f.id} label={f.label} on={settings.cameraFilter === f.id} onClick={() => onChange({ cameraFilter: f.id })} />
+        ))}
+      </div>
+
+      <SubLabel>Frame</SubLabel>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+        {frames.map((f) => (
+          <PickChip key={f.id} label={f.label} on={settings.cameraFrame === f.id} onClick={() => onChange({ cameraFrame: f.id })} />
+        ))}
+      </div>
+      <p style={{ margin: "10px 0 0", fontSize: 11, color: "var(--ink-4)", lineHeight: 1.5 }}>
+        Background blur &amp; scenes run on-device (selfie segmentation); filters &amp; frames are instant.
+      </p>
+    </div>
+  );
+}
+
+function SubLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ margin: "12px 0 6px", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-4)" }}>
+      {children}
+    </div>
+  );
+}
+
+function PickChip({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        height: 32,
+        borderRadius: "var(--r-sm)",
+        border: "1.5px solid",
+        borderColor: on ? "var(--accent)" : "var(--line)",
+        background: on ? "var(--accent-soft)" : "var(--surface)",
+        color: on ? "var(--accent-ink)" : "var(--ink-3)",
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: "pointer",
+        fontFamily: "var(--sans)",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** Live circular webcam preview, scaled to reflect the chosen bubble size + effects. */
+function CameraPreview({ on, deviceId, size, settings }: { on: boolean; deviceId: string; size: CameraSize; settings: Settings }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const compRef = useRef<CameraCompositor | null>(null);
   const [err, setErr] = useState(false);
   // preview diameter scales with the chosen bubble size (capped for the panel)
   const px = Math.round(CAMERA_SIZE_PX[size] * 0.85);
@@ -767,14 +995,34 @@ function CameraPreview({ on, deviceId, size }: { on: boolean; deviceId: string; 
       .getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" }, audio: false })
       .then((s) => {
         stream = s;
-        if (ref.current) {
-          ref.current.srcObject = s;
-          void ref.current.play().catch(() => {});
-        }
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas) return;
+        video.srcObject = s;
+        void video.play().catch(() => {});
+        const comp = new CameraCompositor(video, canvas);
+        compRef.current = comp;
+        comp.setEffect({ effect: settings.cameraEffect, filter: settings.cameraFilter, bgColor: settings.cameraBgColor, bgImage: settings.cameraBgImage });
+        video.onloadeddata = () => comp.start();
       })
       .catch(() => setErr(true));
-    return () => stream?.getTracks().forEach((t) => t.stop());
+    return () => {
+      compRef.current?.stop();
+      compRef.current = null;
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, deviceId]);
+
+  // Live-update the effect without re-acquiring the camera.
+  useEffect(() => {
+    compRef.current?.setEffect({
+      effect: settings.cameraEffect,
+      filter: settings.cameraFilter,
+      bgColor: settings.cameraBgColor,
+      bgImage: settings.cameraBgImage,
+    });
+  }, [settings.cameraEffect, settings.cameraFilter, settings.cameraBgColor, settings.cameraBgImage]);
 
   if (!on) {
     return (
@@ -804,17 +1052,18 @@ function CameraPreview({ on, deviceId, size }: { on: boolean; deviceId: string; 
         height: px,
         borderRadius: "50%",
         overflow: "hidden",
-        border: "3px solid var(--accent)",
+        border: settings.cameraFrame === "ring" ? "3px solid var(--accent)" : "3px solid var(--surface)",
         background: "var(--hud)",
         boxShadow: "var(--e2)",
       }}
     >
+      <video ref={videoRef} autoPlay muted playsInline style={{ display: "none" }} />
       {err ? (
         <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--hud-ink-2)", fontSize: 11, textAlign: "center", padding: 8 }}>
           No camera access
         </div>
       ) : (
-        <video ref={ref} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }} />
+        <canvas ref={canvasRef} style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }} />
       )}
     </div>
   );
@@ -939,12 +1188,14 @@ function RecDock({
   onStop,
   onToggle,
   onCancel,
+  onRestart,
 }: {
   phase: "recording" | "paused";
   elapsed: number;
   onStop: () => void;
   onToggle: () => void;
   onCancel: () => void;
+  onRestart?: () => void;
 }) {
   const recording = phase === "recording";
   return (
@@ -996,6 +1247,7 @@ function RecDock({
       </div>
       <span style={{ width: 1, height: 26, background: "var(--hud-line)" }} />
       <IconBtn icon={recording ? Icons.Pause : Icons.Play} tone="hud" size={44} onClick={onToggle} title={recording ? "Pause" : "Resume"} />
+      {onRestart && <IconBtn icon={Icons.Restart} tone="hud" size={44} onClick={onRestart} title="Restart take" />}
       <IconBtn icon={Icons.Trash} tone="hud" size={44} onClick={onCancel} title="Discard" />
     </div>
   );

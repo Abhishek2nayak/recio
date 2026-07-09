@@ -16,6 +16,7 @@ export default defineConfig({
       input: {
         studio: "src/studio/index.html",
         camera: "src/camera/index.html",
+        launcher: "src/launcher/index.html",
         offscreen: "src/offscreen/index.html",
       },
     },

@@ -23,6 +23,12 @@ export interface RecentItem {
 export type CameraCorner = "bottom-left" | "bottom-right" | "top-left" | "top-right";
 export type CameraSize = "small" | "medium" | "large";
 export type RecordingQuality = "high" | "standard" | "saver";
+/** Camera-bubble background treatment (needs selfie segmentation for blur/image/color). */
+export type CameraEffect = "none" | "blur" | "image" | "color";
+/** Color-grade filter applied to the camera frame (cheap, no segmentation). */
+export type CameraFilter = "none" | "touchup" | "mono" | "warm" | "cool" | "vivid";
+/** Decorative ring/frame around the bubble. */
+export type CameraFrame = "none" | "ring" | "soft";
 /** Light/dark mode. "system" follows the OS (the default). */
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -56,6 +62,16 @@ export interface Settings {
   countdown: boolean;
   /** Light/dark appearance for the extension surfaces. */
   theme: ThemeMode;
+  /** Camera background effect (blur / virtual background image / solid color). */
+  cameraEffect: CameraEffect;
+  /** Solid background color when cameraEffect = "color". */
+  cameraBgColor: string;
+  /** Virtual-background preset id when cameraEffect = "image". */
+  cameraBgImage: string;
+  /** Color-grade filter applied to the camera frame. */
+  cameraFilter: CameraFilter;
+  /** Decorative frame/ring around the bubble. */
+  cameraFrame: CameraFrame;
 }
 
 interface StoreShape {
@@ -77,6 +93,11 @@ const DEFAULTS: StoreShape = {
     cameraDeviceId: "",
     countdown: true,
     theme: "system",
+    cameraEffect: "none",
+    cameraBgColor: "#0B1220",
+    cameraBgImage: "aurora",
+    cameraFilter: "none",
+    cameraFrame: "none",
   },
   recents: [],
 };

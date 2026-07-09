@@ -125,7 +125,9 @@ export function Popup() {
   }
 
   async function record() {
-    await sendMessage({ type: "OPEN_STUDIO" });
+    // Loom-style: show the on-page recorder panel on the active tab (falls back to the
+    // studio tab for pages we can't inject into, e.g. chrome:// or the web store).
+    await sendMessage({ type: "SHOW_LAUNCHER" });
     window.close();
   }
   async function screenshot() {

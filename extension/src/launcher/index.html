@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Vyooom Recorder</title>
+    <style>
+      :root {
+        --card: #18181f;
+        --row: #25252f;
+        --row-h: #2c2c38;
+        --line: #2e2e38;
+        --text: #f2f2f5;
+        --muted: #a9a9b6;
+        --accent: #38c6dd;
+        --accent-ink: #06303a;
+        --go: #16a34a; /* Start = green */
+        --go-h: #1eb257;
+        --danger: #dc2626;
+      }
+      * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", system-ui, sans-serif; }
+      html, body { margin: 0; background: transparent; overflow: hidden; }
+      /* The iframe element (styled by the content script) provides the radius + shadow;
+         the panel just fills it so body height == content height for resize reporting. */
+      #panel { width: 300px; background: var(--card); color: var(--text); user-select: none; }
+      #head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: grab; }
+      #head:active { cursor: grabbing; }
+      .hbtn { width: 38px; height: 38px; border-radius: 999px; border: none; background: var(--row); color: var(--text);
+        cursor: pointer; display: flex; align-items: center; justify-content: center; }
+      .hbtn:hover { background: var(--row-h); }
+      .tabs { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--row); }
+      .tab { width: 52px; height: 30px; border-radius: 999px; border: none; background: transparent; color: var(--muted);
+        cursor: pointer; display: flex; align-items: center; justify-content: center; }
+      .tab:hover { color: var(--text); }
+      .tab.active { background: var(--accent); color: var(--accent-ink); }
+      .x { margin-left: auto; width: 38px; height: 38px; border-radius: 999px; border: none; background: transparent;
+        color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+      .x:hover { background: var(--row); color: var(--text); }
+      #body { padding: 2px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+      #preview { width: 128px; height: 128px; border-radius: 999px; overflow: hidden; align-self: center;
+        border: 3px solid #ffffffe6; background: #000; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+      #preview.ring { border-color: var(--accent); }
+      #preview[hidden] { display: none; }
+      #v { display: none; }
+      #cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+      .srow { display: flex; align-items: center; gap: 13px; padding: 13px 15px; border-radius: 14px; border: none;
+        background: var(--row); color: var(--text); cursor: pointer; width: 100%; text-align: left; font-size: 14px; }
+      .srow:hover { background: var(--row-h); }
+      .srow .ico { display: flex; color: var(--text); }
+      .srow .txt { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .srow .chev { color: var(--muted); display: flex; }
+      .pill { font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; }
+      .pill.off { background: #3a3a46; color: #b9b9c6; }
+      .pill.on { background: var(--go); color: #fff; }
+
+      .devrow { display: flex; align-items: center; gap: 8px; padding: 0 4px 2px; }
+      .devrow select { flex: 1; min-width: 0; height: 30px; border-radius: 8px; border: 1px solid var(--line);
+        background: var(--row); color: var(--muted); font-size: 11.5px; padding: 0 6px; outline: none; cursor: pointer; }
+      .meter { height: 4px; border-radius: 99px; background: #ffffff14; overflow: hidden; margin: 2px 4px 0; }
+      .meter > i { display: block; height: 100%; width: 0%; background: var(--go); transition: width .06s linear; }
+
+      .surf-menu { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 14px; background: #20202a; border: 1px solid var(--line); }
+      .surf-opt { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px; border: none;
+        background: transparent; color: var(--text); cursor: pointer; font-size: 13px; font-weight: 600; text-align: left; width: 100%; }
+      .surf-opt:hover { background: var(--row-h); }
+      .surf-opt.active { color: var(--accent); }
+      .surf-opt .ico { color: var(--muted); display: flex; }
+
+      /* Destination row bits */
+      .pico { width: 17px; height: 17px; display: block; object-fit: contain; }
+      .pill.fix { background: #f59e0b; color: #241a02; }
+      .surf-opt .tag { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 10px;
+        font-weight: 800; padding: 3px 9px; border-radius: 999px; background: #3a3a46; color: #b9b9c6; }
+      .surf-opt .tag.go { background: var(--go); color: #fff; }
+      .warn { display: flex; flex-direction: column; gap: 8px; padding: 11px 12px; border-radius: 12px;
+        border: 1px solid rgba(245, 158, 11, .35); background: rgba(245, 158, 11, .12); color: #fcd34d;
+        font-size: 12px; line-height: 1.45; }
+      .warn-actions { display: flex; gap: 6px; }
+      .warn-btn { flex: 1; height: 32px; border-radius: 9px; border: none; background: var(--go); color: #fff;
+        font-size: 12px; font-weight: 700; cursor: pointer; }
+      .warn-btn:hover { background: var(--go-h); }
+      .warn-btn.ghost { flex: 0 0 auto; padding: 0 12px; background: transparent;
+        border: 1px solid rgba(245, 158, 11, .35); color: #fcd34d; }
+      .warn-btn.ghost:hover { background: rgba(245, 158, 11, .12); }
+
+      .start-row { display: flex; gap: 8px; }
+      .start { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; height: 48px; border: none;
+        border-radius: 14px; background: var(--go); color: #fff; font-size: 15px; font-weight: 800; cursor: pointer; }
+      .start:hover { background: var(--go-h); }
+      .start:disabled { opacity: .45; cursor: not-allowed; }
+      .start:disabled:hover { background: var(--go); }
+      .pencil { width: 48px; height: 48px; border-radius: 14px; border: 1px solid var(--line); background: var(--row);
+        color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+      .pencil:hover { background: var(--row-h); }
+
+      .foot { display: flex; gap: 4px; padding-top: 2px; }
+      .foot button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 2px;
+        border-radius: 12px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; font-weight: 600; }
+      .foot button:hover { background: var(--row); color: var(--text); }
+      .foot button.active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+
+      .fx { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: #20202a; }
+      .fx-label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+      .chips { display: grid; gap: 6px; }
+      .chip { height: 32px; border-radius: 9px; border: 1px solid var(--line); background: var(--row); color: var(--muted);
+        cursor: pointer; font-size: 11.5px; font-weight: 600; }
+      .chip:hover { color: var(--text); }
+      .chip.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div id="panel">
+      <div id="head"></div>
+      <div id="body">
+        <div id="preview" hidden><video id="v" autoplay muted playsinline></video><canvas id="cam"></canvas></div>
+        <div id="controls"></div>
+      </div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

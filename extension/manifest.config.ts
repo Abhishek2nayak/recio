@@ -10,13 +10,13 @@ import { defineManifest } from "@crxjs/vite-plugin";
  */
 export default defineManifest({
   manifest_version: 3,
-  name: "FlowCap — Record & Share to Your Cloud",
+  name: "Vyooom — Record & Share to Your Cloud",
   version: "0.1.0",
   description:
     "Screen recording & screenshots that save straight to your own Google Drive. Your storage, your control.",
   minimum_chrome_version: "116",
   action: {
-    default_title: "FlowCap",
+    default_title: "Vyooom",
     default_popup: "src/popup/index.html",
     default_icon: {
       "16": "icons/icon-16.png",
@@ -58,7 +58,9 @@ export default defineManifest({
   // script, so it (and its hashed JS) must be web-accessible.
   web_accessible_resources: [
     {
-      resources: ["src/camera/index.html", "assets/*"],
+      // The camera bubble + recorder launcher iframes and the segmentation model/wasm
+      // (self-hosted; MV3 CSP blocks loading these from a CDN), plus shared image assets.
+      resources: ["src/camera/index.html", "src/launcher/index.html", "assets/*", "mediapipe/*"],
       matches: ["<all_urls>"],
     },
   ],

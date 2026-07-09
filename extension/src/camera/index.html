@@ -12,11 +12,20 @@
         overflow: hidden;
         font-family: system-ui, sans-serif;
       }
-      #cam {
+      #cam,
+      #out {
+        position: absolute;
+        inset: 0;
         width: 100vw;
         height: 100vh;
         object-fit: cover;
         transform: scaleX(-1); /* selfie mirror */
+      }
+      #cam {
+        visibility: hidden; /* hidden source; the canvas is what shows + is captured */
+      }
+      #out.ring {
+        box-shadow: inset 0 0 0 4px #38c6dd;
       }
       #blocked {
         display: none;
@@ -32,13 +41,15 @@
       body.blocked #blocked {
         display: flex;
       }
-      body.blocked #cam {
+      body.blocked #cam,
+      body.blocked #out {
         display: none;
       }
     </style>
   </head>
   <body>
     <video id="cam" autoplay muted playsinline></video>
+    <canvas id="out"></canvas>
     <div id="blocked">Camera blocked</div>
     <script type="module" src="./main.ts"></script>
   </body>

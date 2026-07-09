@@ -180,6 +180,42 @@ async function finalize(): Promise<void> {
   }
 }
 
+/** Throw away the current take and start fresh on the SAME surface (no new picker). */
+function restart(): void {
+  if (!recorder || !displayStream) return;
+  const stream = recorder.stream;
+  if (recorder.state !== "inactive") {
+    recorder.onstop = null;
+    recorder.stop();
+  }
+  recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: recorder.videoBitsPerSecond });
+  chunks = [];
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
+  recorder.onstop = () => void finalize();
+  recorder.start(1000);
+  startedAt = performance.now();
+  pausedMs = 0;
+  lastPauseAt = 0;
+  sendTick("recording");
+}
+
+/** Abort without producing/uploading a file (the dock's trash control). */
+function cancel(): void {
+  settled = true; // block finalize()'s upload path
+  if (tickTimer != null) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+  if (recorder && recorder.state !== "inactive") {
+    recorder.onstop = null;
+    recorder.stop();
+  }
+  cleanup();
+  void sendMessage({ type: "RECORDING_ENDED" });
+}
+
 function cleanup(): void {
   displayStream?.getTracks().forEach((t) => t.stop());
   micStream?.getTracks().forEach((t) => t.stop());
@@ -196,6 +232,8 @@ chrome.runtime.onMessage.addListener((message: Message) => {
     if (message.action === "pause") pause();
     if (message.action === "resume") resume();
     if (message.action === "stop") stop();
+    if (message.action === "restart") restart();
+    if (message.action === "cancel") cancel();
   }
   // Fire-and-forget: never respond, so we don't race the SW's own listener.
 });

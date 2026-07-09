@@ -18,16 +18,39 @@ import {
 import { publishScreenshot } from "./storage/swPublish.js";
 import { connectDrive, signInWithGoogle } from "./auth/googleAuth.js";
 import { connectDropbox } from "./auth/dropboxAuth.js";
+import { blockMessage, resolveDestination } from "./lib/destination.js";
 import { config } from "./config.js";
 
 const uploads = new Map<string, UploadState>();
 
-const recording: RecordingStatus & { studioTabId: number | null } = {
+const recording: RecordingStatus & { studioTabId: number | null; viaOffscreen: boolean } = {
   active: false,
   state: "recording",
   elapsedMs: 0,
   studioTabId: null,
+  viaOffscreen: false,
 };
+
+/** Show the on-page recorder panel on the active tab; fall back to the studio tab. */
+async function showLauncher(): Promise<void> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !isInjectable(tab.url)) {
+    await openStudio();
+    return;
+  }
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: "SHOW_RECORDER_PANEL" } satisfies Message);
+  } catch {
+    // Content script not present yet (tab opened before an extension reload) — inject + retry.
+    try {
+      const files = chrome.runtime.getManifest().content_scripts?.[0]?.js;
+      if (files?.length) await chrome.scripting.executeScript({ target: { tabId: tab.id }, files });
+      await chrome.tabs.sendMessage(tab.id, { type: "SHOW_RECORDER_PANEL" } satisfies Message);
+    } catch {
+      await openStudio();
+    }
+  }
+}
 
 function studioUrl(mode?: "screen" | "whiteboard"): string {
   const base = chrome.runtime.getURL("src/studio/index.html");
@@ -59,24 +82,34 @@ async function closeOffscreen(): Promise<void> {
  * stream id to the offscreen recorder. No studio tab — the user stays on their own
  * content with just the floating bar + camera bubble (injected by the content script).
  */
-async function startRecording(): Promise<void> {
+async function startRecording(surface?: "screen" | "window" | "tab"): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
+
+  // Pre-flight the upload destination BEFORE any capture: a free account left on
+  // the gated Vyooom Cloud default (or a revoked Drive grant) must hit a fix-it
+  // prompt now, not an upgrade error after they've already recorded. The launcher
+  // runs the same check with richer UI; this is the backstop for every entry path.
+  if (!(await guardDestination(tab.id, "recording"))) return;
 
   try {
     // Create the recorder document FIRST so its message listener is live before we
     // push the (short-lived) stream id — otherwise the OFFSCREEN_START can race the
     // listener registration and get dropped.
     await ensureOffscreen();
+    recording.viaOffscreen = true;
 
+    // Bias the native picker toward the surface chosen in the on-page panel; always keep
+    // `audio` so the "share tab/system audio" checkbox is offered.
+    const sources: ("screen" | "window" | "tab" | "audio")[] = surface
+      ? [surface, "audio"]
+      : ["screen", "window", "tab", "audio"];
     const streamId = await new Promise<string>((resolve) => {
-      // `audio` adds the "Share tab/system audio" checkbox to the picker.
-      chrome.desktopCapture.chooseDesktopMedia(["screen", "window", "tab", "audio"], tab, (id) =>
-        resolve(id ?? ""),
-      );
+      chrome.desktopCapture.chooseDesktopMedia(sources, tab, (id) => resolve(id ?? ""));
     });
     if (!streamId) {
       await closeOffscreen(); // user cancelled the picker — tear the empty doc down
+      recording.viaOffscreen = false;
       return;
     }
     chrome.runtime.sendMessage({ type: "OFFSCREEN_START", streamId } satisfies Message).catch(() => {});
@@ -126,10 +159,38 @@ function isInjectable(url: string | undefined): boolean {
   return /^https?:\/\//.test(url) && !url.startsWith("https://chrome.google.com/webstore");
 }
 
+/**
+ * Verify the default destination can accept a new capture; on failure toast the
+ * reason on `tabId` and return false. Fail-open when the API is unreachable (the
+ * pending-upload store covers upload failures; blocking capture offline is worse).
+ */
+async function guardDestination(tabId: number, kind: "recording" | "screenshot"): Promise<boolean> {
+  let error: string;
+  try {
+    const check = await resolveDestination();
+    if (check.ok) return true;
+    error = blockMessage(check);
+  } catch {
+    return true;
+  }
+  chrome.tabs
+    .sendMessage(tabId, {
+      type: "SHOW_TOAST",
+      title: kind === "recording" ? "Can't start recording" : "Can't take a screenshot",
+      error,
+    } satisfies Message)
+    .catch(() => {});
+  return false;
+}
+
 /** Start on-page region selection on the active tab (fallback: full visible capture). */
 async function startScreenshot(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
+
+  // Same pre-flight as recordings — a screenshot to a gated/broken destination
+  // would fail AFTER capture and (unlike recordings) has no local safety copy.
+  if (!(await guardDestination(tab.id, "screenshot"))) return;
 
   if (!isInjectable(tab.url)) {
     // chrome://, the web store, PDFs, etc. — no overlay possible, capture full tab.
@@ -237,8 +298,12 @@ async function handleMessage(
       await openStudio(message.mode);
       return { ok: true };
 
+    case "SHOW_LAUNCHER":
+      await showLauncher();
+      return { ok: true };
+
     case "START_RECORDING":
-      await startRecording();
+      await startRecording(message.surface);
       return { ok: true };
 
     case "CAPTURE_SCREENSHOT":
@@ -317,6 +382,7 @@ async function handleMessage(
       recording.active = false;
       recording.elapsedMs = 0;
       recording.studioTabId = null;
+      recording.viaOffscreen = false;
       void broadcastRecordingState();
       return { ok: true };
 
@@ -354,9 +420,17 @@ async function handleMessage(
         recording: { active: recording.active, state: recording.state, elapsedMs: recording.elapsedMs },
       };
 
-    // ── Remote controls (from the on-page bar → studio tab) ──
+    // ── Remote controls (from the on-page dock) ──
     case "RECORDING_CONTROL":
-      if (recording.studioTabId != null) {
+      if (recording.viaOffscreen) {
+        // Offscreen engine: relay as OFFSCREEN_CONTROL (same action set).
+        chrome.runtime.sendMessage({ type: "OFFSCREEN_CONTROL", action: message.action } satisfies Message).catch(() => {});
+        // Cancel discards with no upload, so tear the (otherwise lingering) doc down.
+        if (message.action === "cancel") {
+          recording.viaOffscreen = false;
+          setTimeout(() => void closeOffscreen(), 600);
+        }
+      } else if (recording.studioTabId != null) {
         chrome.tabs.sendMessage(recording.studioTabId, message).catch(() => {});
       }
       return { ok: true };

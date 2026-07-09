@@ -34,12 +34,16 @@ export interface Rect {
 export type Message =
   // popup / shortcuts → SW
   | { type: "OPEN_STUDIO"; mode?: "screen" | "whiteboard" }
-  | { type: "START_RECORDING" } // (legacy offscreen path; unused — recording runs in the studio page)
+  // popup → SW → active tab: show the Loom-style on-page recorder panel
+  | { type: "SHOW_LAUNCHER" }
+  | { type: "SHOW_RECORDER_PANEL" }
+  // panel → SW: begin a recording on the chosen surface (offscreen engine)
+  | { type: "START_RECORDING"; surface?: "screen" | "window" | "tab" }
   | { type: "CAPTURE_SCREENSHOT" } // kicks off on-page region selection
   | { type: "GET_UPLOADS" }
   // SW → offscreen document (the actual recorder)
   | { type: "OFFSCREEN_START"; streamId: string }
-  | { type: "OFFSCREEN_CONTROL"; action: "pause" | "resume" | "stop" }
+  | { type: "OFFSCREEN_CONTROL"; action: "pause" | "resume" | "stop" | "restart" | "cancel" }
   // offscreen → SW
   | { type: "REQUEST_COUNTDOWN"; seconds: number } // ask SW to show a countdown on the active tab
   | { type: "RECORDING_PUBLISHED"; shareUrl: string | null; mediaId: string }
@@ -64,7 +68,7 @@ export type Message =
   | { type: "STUDIO_PUBLISHED"; shareUrl: string }
   // content bar → SW → studio: remote controls
   | { type: "GET_RECORDING_STATE" }
-  | { type: "RECORDING_CONTROL"; action: "pause" | "resume" | "stop" }
+  | { type: "RECORDING_CONTROL"; action: "pause" | "resume" | "stop" | "restart" | "cancel" }
   // SW → content (active tab): begin region capture
   | { type: "START_REGION_SCREENSHOT" }
   // content → SW: a region (or null = full visible tab) was selected

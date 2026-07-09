@@ -65,6 +65,22 @@ export const LinkVisibility = {
 } as const;
 export type LinkVisibility = (typeof LinkVisibility)[keyof typeof LinkVisibility];
 
+/** Languages offered for AI caption translation on the share page. */
+export const CAPTION_LANGUAGES: { code: string; label: string }[] = [
+  { code: "es", label: "Spanish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "pt", label: "Portuguese" },
+  { code: "it", label: "Italian" },
+  { code: "nl", label: "Dutch" },
+  { code: "hi", label: "Hindi" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "zh", label: "Chinese" },
+  { code: "ar", label: "Arabic" },
+  { code: "ru", label: "Russian" },
+];
+
 /** Surfaces offered to `getDisplayMedia` — the user picks one in the native picker. */
 export const DisplaySurface = {
   MONITOR: "monitor",

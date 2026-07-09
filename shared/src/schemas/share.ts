@@ -18,3 +18,30 @@ export const updateSharePermissionSchema = z.object({
   visibility: z.nativeEnum(LinkVisibility),
 });
 export type UpdateSharePermissionInput = z.infer<typeof updateSharePermissionSchema>;
+
+/**
+ * Privacy controls for a link (owner). `password`: a non-empty string sets/replaces the
+ * passcode, "" or null clears it, undefined leaves it unchanged. `expiresAt`: ISO string
+ * sets an expiry, null clears it, undefined leaves it unchanged.
+ */
+export const updateShareSettingsSchema = z
+  .object({
+    password: z.string().max(128).nullable().optional(),
+    expiresAt: z.string().datetime().nullable().optional(),
+  })
+  .refine((v) => v.password !== undefined || v.expiresAt !== undefined, {
+    message: "Provide password and/or expiresAt.",
+  });
+export type UpdateShareSettingsInput = z.infer<typeof updateShareSettingsSchema>;
+
+/** Viewer submits a passcode to open a password-gated link (public). */
+export const unlockShareSchema = z.object({
+  password: z.string().min(1).max(128),
+});
+export type UnlockShareInput = z.infer<typeof unlockShareSchema>;
+
+/** Viewer requests AI-translated captions for a public share. */
+export const translateShareSchema = z.object({
+  lang: z.string().min(2).max(8),
+});
+export type TranslateShareInput = z.infer<typeof translateShareSchema>;

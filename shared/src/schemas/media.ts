@@ -69,6 +69,9 @@ export const updateMediaSchema = z
     trimEndSec: z.number().min(0).nullable().optional(),
     // Non-destructive overlays (recordings only). `null` clears all overlays.
     overlays: z.array(overlaySchema).max(50).nullable().optional(),
+    // Per-video call-to-action button (recordings). `null` clears it.
+    ctaLabel: z.string().trim().max(60).nullable().optional(),
+    ctaUrl: z.string().url().max(500).nullable().optional(),
     // Move into a team workspace's shared library; `null` moves back to personal.
     workspaceId: z.string().nullable().optional(),
   })

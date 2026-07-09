@@ -89,6 +89,9 @@ export interface RecordingDTO extends MediaBase {
   cuts: CutSegment[] | null;
   /** Non-destructive overlays (text/box/blur) drawn over playback; null/[] = none. */
   overlays: Overlay[] | null;
+  /** Per-video call-to-action button shown on the share page; null = none. */
+  ctaLabel: string | null;
+  ctaUrl: string | null;
 }
 
 export interface ScreenshotDTO extends MediaBase {
@@ -180,6 +183,19 @@ export interface TranscriptWord {
 }
 
 /** AI transcript + summary for a recording. `null` from the API = not generated yet. */
+/** A single caption cue (seconds) — used for translated caption tracks. */
+export interface CaptionCue {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** AI-translated captions for a share, returned by POST /share/:token/translate. */
+export interface TranslatedCaptionsDTO {
+  language: string;
+  cues: CaptionCue[];
+}
+
 export interface TranscriptDTO {
   status: TranscriptStatus;
   language: string | null;
@@ -213,6 +229,8 @@ export interface ShareDTO {
   token: string;
   permission: SharePermission;
   expiresAt: ISODateString | null;
+  /** Whether a viewer passcode is set (the hash itself is never returned). */
+  hasPassword: boolean;
   createdAt: ISODateString;
 }
 
@@ -245,6 +263,11 @@ export interface PublicShareViewDTO {
   ownerName: string | null;
   /** Owner's custom branding, resolved only when their plan includes it; else null. */
   branding: BrandingDTO | null;
+  /** Call-to-action button: the recording's own CTA, else the owner's account CTA; null = none. */
+  cta: { label: string; url: string } | null;
   createdAt: ISODateString;
   permission: SharePermission;
+  /** Password-gated: true means the viewer must POST /share/:token/unlock first. When
+   * locked, `playbackUrl` (and transcript/overlays) are withheld. */
+  locked?: boolean;
 }
